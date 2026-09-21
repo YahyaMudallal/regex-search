@@ -4,12 +4,15 @@ import com.sorbonne.automata.Automaton;
 import com.sorbonne.automata.State;
 import com.sorbonne.automata.Status;
 import com.sorbonne.automata.Transition;
+import com.sorbonne.benchmark.Benchmark;
+import java.nio.file.Path;
 
 /**
  * Point d'entrée progressif du projet de recherche par expression régulière.
  *
  * <p>Le programme démontre les fonctionnalités disponibles : construction manuelle
- * d'un automate, affichage du graphe et comparaison des types de transition.
+ * d'un automate, affichage du graphe, comparaison des types de transition
+ * et liste des fichiers texte du dossier {@code Samples}.
  * Les prochaines étapes sont annoncées à la fin de l'exécution.</p>
  */
 public class Main {
@@ -43,7 +46,12 @@ public class Main {
         demonstrateTransitionTypes();
 
         // ================================================================
-        // PARTIE 3 — Étapes à intégrer au fil de l'implémentation
+        // PARTIE 3 — Première étape du benchmark : fichiers texte
+        // ================================================================
+        demonstrateBenchmark();
+
+        // ================================================================
+        // PARTIE 4 — Étapes à intégrer au fil de l'implémentation
         // ================================================================
         printNextSteps();
     }
@@ -151,6 +159,25 @@ public class Main {
     }
 
     // ====================================================================
+    // DÉMONSTRATION DU BENCHMARK
+    // ====================================================================
+
+    /**
+     * Lance le pipeline actuel du benchmark sur le dossier {@code Samples}.
+     *
+     * <p>Pour le moment, il affiche seulement les noms correspondant à
+     * {@code *.txt}, sans mesurer de performances. Le chemin est relatif
+     * à la racine du projet, depuis laquelle le programme doit être lancé.</p>
+     */
+    private static void demonstrateBenchmark() {
+        printSection("3. Benchmark — fichiers texte du dossier Samples");
+
+        // Le filtre est un glob de noms de fichiers, pas une expression régulière.
+        Benchmark instance = new Benchmark(Path.of("Samples"), "*.txt");
+        instance.pipeline();
+    }
+
+    // ====================================================================
     // PROCHAINES ÉTAPES DU PROJET
     // ====================================================================
 
@@ -161,7 +188,7 @@ public class Main {
      * encore vide et n'annonce aucun résultat de recherche ou de performance.</p>
      */
     private static void printNextSteps() {
-        printSection("3. Suite du projet — à implémenter");
+        printSection("4. Suite du projet — à implémenter");
 
         // TODO : Ajouter une démonstration de RegexParser et SyntaxTree.
         System.out.println("[À faire] Transformer une expression régulière en arbre syntaxique.");
