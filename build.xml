@@ -1,0 +1,21 @@
+<project name="regex-search" default="jar">
+    <property name="src.dir" value="src/main/java"/>
+    <property name="test.dir" value="src/test/java"/>
+    <property name="build.dir" value="build"/>
+    <property name="classes.dir" value="${build.dir}/classes"/>
+    <target name="clean">
+        <delete dir="${build.dir}"/>
+    </target>
+    <target name="compile">
+        <mkdir dir="${classes.dir}"/>
+        <javac srcdir="${src.dir}" destdir="${classes.dir}" source="21" target="21" encoding="UTF-8" includeantruntime="false"/>
+    </target>
+    <target name="jar" depends="compile">
+        <jar destfile="regex-search.jar">
+            <fileset dir="${classes.dir}"/>
+            <manifest>
+                <attribute name="Main-Class" value="com.sorbonne.Main"/>
+            </manifest>
+        </jar>
+    </target>
+</project>
