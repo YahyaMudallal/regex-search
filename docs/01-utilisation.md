@@ -56,16 +56,35 @@ mvn -Dtest=BenchmarkTest,BenchmarkPropertyTest test
 
 ## 3. Rechercher dans un fichier
 
+### Afficher les lignes correspondantes
+
+Pour utiliser le moteur comme une recherche interactive de type `egrep -n`, afficher chaque ligne correspondante avec son numéro :
+
+```bash
+./scripts/search.sh Samples/PrideAndPrejudice.txt 'Elizabeth|Darcy'
+```
+
+La sortie est écrite au format `numéro:contenu`. Le motif est préparé une seule fois et les lignes sont transmises au fur et à mesure, sans conserver tout le fichier en mémoire. Une ligne contenant plusieurs occurrences n’est affichée qu’une fois.
+
+La stratégie peut être imposée en dernier argument :
+
+```bash
+./scripts/search.sh Samples/PrideAndPrejudice.txt 'Elizabeth' KMP
+./scripts/search.sh Samples/PrideAndPrejudice.txt 'Elizabeth|Darcy' AUTOMATON
+```
+
+Ce mode n’affiche ni timings ni compteurs supplémentaires. Pour obtenir uniquement le nombre de lignes, utiliser `--count` ou `scripts/compare-egrep.sh`.
+
 ```bash
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth|Darcy' AUTO
 ```
 
 Les trois arguments sont le chemin du fichier, l’expression régulière et une stratégie optionnelle. Les guillemets simples empêchent le shell d’interpréter `|`, `*`, les parenthèses ou la barre oblique inverse.
 
-| Stratégie | Comportement |
-| :--- | :--- |
-| `AUTO` | Analyse l’arbre et choisit KMP si le motif est une concaténation de lettres |
-| `KMP` | Impose KMP ; une expression non littérale est refusée |
+| Stratégie   | Comportement                                                                   |
+| :---------- | :----------------------------------------------------------------------------- |
+| `AUTO`      | Analyse l’arbre et choisit KMP si le motif est une concaténation de lettres    |
+| `KMP`       | Impose KMP ; une expression non littérale est refusée                          |
 | `AUTOMATON` | Impose NFA → DFA → DFAM → préparation de la recherche, même pour un mot simple |
 
 ```bash
@@ -116,11 +135,11 @@ Le manifeste du JAR désigne `com.sorbonne.Main`. Le nom de l’archive dépend 
 
 Le dossier de sortie doit être nouveau. La commande crée une copie temporaire normalisée du fichier, vérifie que Java et grep annoncent le même nombre de lignes, puis alterne les exécutions dans un ordre pseudo-aléatoire reproductible.
 
-| Fichier de résultat | Contenu |
-| :--- | :--- |
-| `runs.csv` | Chaque mesure, sa position dans la paire, le moteur et le nombre de lignes |
-| `summary.csv` | Moyenne, médiane, écart type d’échantillon, minimum et maximum |
-| `metadata.json` | Motif, stratégie, versions, locale et empreinte du corpus normalisé |
+| Fichier de résultat | Contenu                                                                    |
+| :------------------ | :------------------------------------------------------------------------- |
+| `runs.csv`          | Chaque mesure, sa position dans la paire, le moteur et le nombre de lignes |
+| `summary.csv`       | Moyenne, médiane, écart type d’échantillon, minimum et maximum             |
+| `metadata.json`     | Motif, stratégie, versions, locale et empreinte du corpus normalisé        |
 
 Les mesures brutes sont en nanosecondes ; les résumés sont en millisecondes. L’écart type décrit la dispersion des observations, pas un intervalle de confiance sur la moyenne.
 
@@ -148,15 +167,15 @@ Cette installation est optionnelle. Elle ne modifie ni le POM ni les dépendance
 
 ## 6. Diagnostic rapide
 
-| Symptôme | Vérification utile |
-| :--- | :--- |
-| `JAVA_HOME must point to a full JDK` | Vérifier `JAVA_HOME/bin/java` et `JAVA_HOME/bin/javac` |
-| Maven hors ligne ne trouve pas un plugin | Relancer sans `MAVEN_OFFLINE=1` avec accès réseau |
-| Le script refuse le grep du système | Utiliser GNU grep, éventuellement avec `--grep` |
-| Le motif semble interprété par le terminal | Entourer la regex de guillemets simples |
-| KMP refuse `a.b` | Le point est un opérateur ; utiliser `AUTO`, ou `a\.b` pour un point littéral |
-| Le dossier de résultats existe déjà | Choisir un autre `--output-dir` pour préserver l’expérience précédente |
-| Le fichier UTF-8 est rejeté | Vérifier son encodage ; le lecteur ne remplace pas silencieusement les octets invalides |
-| Les temps varient entre deux appels | Consulter toutes les répétitions ; ne pas comparer une seule observation |
+| Symptôme                                   | Vérification utile                                                                      |
+| :----------------------------------------- | :-------------------------------------------------------------------------------------- |
+| `JAVA_HOME must point to a full JDK`       | Vérifier `JAVA_HOME/bin/java` et `JAVA_HOME/bin/javac`                                  |
+| Maven hors ligne ne trouve pas un plugin   | Relancer sans `MAVEN_OFFLINE=1` avec accès réseau                                       |
+| Le script refuse le grep du système        | Utiliser GNU grep, éventuellement avec `--grep`                                         |
+| Le motif semble interprété par le terminal | Entourer la regex de guillemets simples                                                 |
+| KMP refuse `a.b`                           | Le point est un opérateur ; utiliser `AUTO`, ou `a\.b` pour un point littéral           |
+| Le dossier de résultats existe déjà        | Choisir un autre `--output-dir` pour préserver l’expérience précédente                  |
+| Le fichier UTF-8 est rejeté                | Vérifier son encodage ; le lecteur ne remplace pas silencieusement les octets invalides |
+| Les temps varient entre deux appels        | Consulter toutes les répétitions ; ne pas comparer une seule observation                |
 
 [← Accueil](../README.md) · [Chapitre suivant : conception →](02-conception.md)

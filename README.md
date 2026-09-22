@@ -14,27 +14,27 @@
 
 Une commande comme `grep -E 'Elizabeth|Darcy' roman.txt` tient sur une ligne. Derrière cette ligne, il faut pourtant répondre à plusieurs questions : comment représenter le motif ? Comment reconnaître une occurrence au milieu du texte ? Que faut-il préparer une seule fois, et que faut-il recommencer à chaque ligne ? À quel moment le coût de préparation devient-il plus important que la recherche elle-même ?
 
-Ce projet reprend ces questions en construisant un moteur de recherche textuelle en Java. Le point de départ est une expression régulière et un fichier UTF-8. Le résultat recherché est l’ensemble des lignes contenant une occurrence du motif. Dans la version actuelle orientée benchmark, le programme **compte ces lignes** : il ne les affiche pas encore comme le ferait la commande interactive `egrep`.
+Ce projet reprend ces questions en construisant un moteur de recherche textuelle en Java. Le point de départ est une expression régulière et un fichier UTF-8. Le résultat recherché est l’ensemble des lignes contenant une occurrence du motif. Le projet propose un mode de recherche qui affiche ces lignes avec leur numéro, ainsi qu’un mode benchmark qui les compte sans les afficher.
 
 Deux chemins sont disponibles. Un motif littéral, comme `Elizabeth`, est recherché par **Knuth–Morris–Pratt**. Un motif qui utilise une alternative, une étoile ou un point universel passe par un **arbre syntaxique**, un **automate non déterministe avec transitions ε**, puis un **automate déterministe**. La préparation transforme ensuite cet automate de reconnaissance en un moteur capable de trouver une occurrence à n’importe quelle position d’une ligne.
 
 L’intérêt du travail tient autant aux résultats qu’aux distinctions à faire pour les obtenir. Reconnaître un mot entier ne suffit pas à trouver ce mot dans une phrase. Une recherche linéaire peut nécessiter une préparation coûteuse. Un benchmark Java mesuré après le démarrage de la JVM ne se compare pas directement au temps complet d’une commande `grep`. Ces points guident l’implémentation, les tests et le protocole expérimental présenté dans ce dépôt.
 
-> **État de cette version.** La lecture des fichiers, KMP, les constructions NFA/DFA et la recherche préparée fonctionnent. `DFAM.minimize()` est un point d’intégration : il renvoie encore le DFA reçu. Les mesures publiées ne décrivent donc **pas** une chaîne avec minimisation effective. La conformité au sujet reste à compléter sur ce point et sur l’affichage des lignes.
+> **État de cette version.** La lecture des fichiers, KMP, les constructions NFA/DFA, la recherche préparée et l’affichage des lignes correspondantes fonctionnent. `DFAM.minimize()` est un point d’intégration : il renvoie encore le DFA reçu. Les mesures publiées ne décrivent donc **pas** une chaîne avec minimisation effective.
 
 <a id="rapport"></a>
 
 ## Parcours de lecture
 
-| Partie | Ce qu’on y trouve |
-| :--- | :--- |
-| **01 — [Installer et utiliser](docs/01-utilisation.md)** | Prérequis, scripts, exemples, binaire JAR et résolution des erreurs courantes |
-| **02 — [Définir le problème et l’architecture](docs/02-conception.md)** | Contrat de recherche, syntaxe supportée, structures de données et partage des responsabilités |
-| **03 — [Comprendre les algorithmes](docs/03-algorithmes.md)** | Construction des automates, fermetures ε, point universel, recherche de facteur, KMP et complexités |
-| **04 — [Vérifier les résultats](docs/04-validation.md)** | Tests simples, cas limites, génération reproductible, oracles et limites de la couverture |
-| **05 — [Mesurer et discuter](docs/05-experiences.md)** | Protocole, campagne réelle, graphiques, données brutes et limites des conclusions |
-| **06 — [Terminer et préparer le rendu](docs/06-perspectives.md)** | Travail restant, évolutions possibles et plan de synthèse conforme au sujet |
-| **Références — [Sources et bibliographie](docs/references.md)** | Sujet, chapitre fourni et documentation technique utilisée |
+| Partie                                                                  | Ce qu’on y trouve                                                                                   |
+| :---------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------- |
+| **01 — [Installer et utiliser](docs/01-utilisation.md)**                | Prérequis, scripts, exemples, binaire JAR et résolution des erreurs courantes                       |
+| **02 — [Définir le problème et l’architecture](docs/02-conception.md)** | Contrat de recherche, syntaxe supportée, structures de données et partage des responsabilités       |
+| **03 — [Comprendre les algorithmes](docs/03-algorithmes.md)**           | Construction des automates, fermetures ε, point universel, recherche de facteur, KMP et complexités |
+| **04 — [Vérifier les résultats](docs/04-validation.md)**                | Tests simples, cas limites, génération reproductible, oracles et limites de la couverture           |
+| **05 — [Mesurer et discuter](docs/05-experiences.md)**                  | Protocole, campagne réelle, graphiques, données brutes et limites des conclusions                   |
+| **06 — [Terminer et préparer le rendu](docs/06-perspectives.md)**       | Travail restant, évolutions possibles et plan de synthèse conforme au sujet                         |
+| **Références — [Sources et bibliographie](docs/references.md)**         | Sujet, chapitre fourni et documentation technique utilisée                                          |
 
 Le README permet de démarrer sans lire tout le rapport. Les chapitres servent ensuite à suivre une décision jusqu’au code ou à vérifier un résultat jusqu’au CSV qui l’a produit.
 
@@ -42,14 +42,14 @@ Le README permet de démarrer sans lire tout le rapport. Les chapitres servent e
 
 ## 01 · Prérequis et première exécution
 
-| Outil | Version / usage |
-| :--- | :--- |
-| **JDK** | Java **21 ou supérieur**, avec `java` et `javac` ; version cible définie dans `pom.xml` |
-| **Maven** | **3.6.3 ou supérieur** pour compiler, résoudre les dépendances et exécuter JUnit |
-| **Bash** | Point d’entrée des scripts ; utilisable sous Linux, macOS ou un environnement Linux tel que WSL |
-| **Python** | **3.9 ou supérieur**, bibliothèque standard pour les comparaisons et leurs tests |
-| **GNU grep** | Nécessaire uniquement pour la comparaison ; `ggrep` est recherché en priorité sur macOS |
-| **Locale UTF-8** | Nécessaire pour donner le même sens aux caractères dans la comparaison |
+| Outil            | Version / usage                                                                                 |
+| :--------------- | :---------------------------------------------------------------------------------------------- |
+| **JDK**          | Java **21 ou supérieur**, avec `java` et `javac` ; version cible définie dans `pom.xml`         |
+| **Maven**        | **3.6.3 ou supérieur** pour compiler, résoudre les dépendances et exécuter JUnit                |
+| **Bash**         | Point d’entrée des scripts ; utilisable sous Linux, macOS ou un environnement Linux tel que WSL |
+| **Python**       | **3.9 ou supérieur**, bibliothèque standard pour les comparaisons et leurs tests                |
+| **GNU grep**     | Nécessaire uniquement pour la comparaison ; `ggrep` est recherché en priorité sur macOS         |
+| **Locale UTF-8** | Nécessaire pour donner le même sens aux caractères dans la comparaison                          |
 
 JUnit **6.1.3** est une dépendance de test téléchargée par Maven. Le moteur Java n’appelle ni `grep` ni `java.util.regex` pour effectuer ses recherches. Matplotlib sert uniquement à régénérer les figures du rapport ; il n’est requis ni pour lancer le moteur ni pour exécuter les tests ordinaires.
 
@@ -62,12 +62,15 @@ Depuis la racine du projet :
 # 2. Chercher une regex dans un fichier et afficher le détail des durées Java.
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth|Darcy' AUTO
 
+# Afficher les lignes correspondantes avec leur numéro.
+./scripts/search.sh Samples/PrideAndPrejudice.txt 'Elizabeth|Darcy'
+
 # 3. Comparer les commandes complètes Java et GNU grep -E.
 ./scripts/compare-egrep.sh Samples/PrideAndPrejudice.txt \
   'Elizabeth|Darcy' --runs 20 --warmups 3
 ```
 
-Le fichier fourni donne **1 050 lignes correspondantes sur 14 915** pour `Elizabeth|Darcy`. Ce résultat concerne la copie du livre présente dans le dépôt, en incluant son en-tête et sa notice Gutenberg. Une autre édition peut produire un autre compte.
+Le fichier fourni donne **1 050 lignes correspondantes sur 14 915** pour `Elizabeth|Darcy`. Ce résultat concerne la copie du livre présente dans le dépôt, en incluant son en-tête et sa notice Gutenberg. Une autre édition peut produire un autre compte. Le mode `search.sh` affiche ces lignes au format `numéro:contenu`, comme `egrep -n`.
 
 Pour comparer KMP et les automates sur **le même motif** :
 
@@ -96,12 +99,12 @@ flowchart LR
     K --> L["Recherche sur chaque ligne"]
     S --> L
     F["Fichier UTF-8 · lecture bufferisée"] --> L
-    L --> O["Nombre de lignes + durées"]
+    L --> O["Lignes affichées ou compteurs + durées"]
     style M fill:#fff3d6,stroke:#ba7b13,color:#5b3c0a
     style L fill:#e3f4ef,stroke:#16866b,color:#124a3b
 ```
 
-La préparation du motif se fait **avant** la boucle de lecture. Les objets `Prepared` ne conservent pas la position atteinte dans la ligne précédente. Le lecteur utilise un tampon de 64 K caractères et ne conserve pas les anciennes lignes ; une ligne exceptionnellement longue doit toutefois tenir en mémoire.
+La préparation du motif se fait **avant** la boucle de lecture. Les objets `Prepared` ne conservent pas la position atteinte dans la ligne précédente. Le lecteur utilise un tampon de 64 K caractères et ne conserve pas les anciennes lignes ; le mode d’affichage transmet chaque correspondance immédiatement, tandis qu’une ligne exceptionnellement longue doit toutefois tenir en mémoire.
 
 Le choix de KMP repose sur l’arbre syntaxique. Par exemple, `a.b` contient un point universel et utilise les automates, tandis que `a\.b` représente trois caractères littéraux et peut utiliser KMP. Tester simplement si la chaîne contient un point conduirait à un mauvais choix.
 
@@ -144,6 +147,6 @@ Les tests ne sont pas seulement des exemples heureux. Ils couvrent aussi les cor
 
 ## 05 · Ce qui reste à terminer
 
-La priorité est d’implémenter la minimisation, puis de vérifier qu’elle préserve le langage et respecte les classes de caractères du DFA. Un mode affichant les lignes correspondantes reste également à ajouter pour compléter le comportement attendu d’un clone d’`egrep`.
+La priorité est d’implémenter la minimisation, puis de vérifier qu’elle préserve le langage et respecte les classes de caractères du DFA. Le mode d’affichage des lignes est disponible via `scripts/search.sh`.
 
 Le dossier `docs/` est volontairement plus développé qu’un rapport de remise. Le [sujet](src/main/java/com/sorbonne/specifications/daar_projet1.pdf) conseille 5 à 10 pages et impose une limite de 12 pages : le [plan de synthèse](docs/06-perspectives.md#rendu) indique quoi conserver dans ce format. La documentation étendue et les données expérimentales peuvent accompagner le rendu sans être confondues avec ce document limité en pages.

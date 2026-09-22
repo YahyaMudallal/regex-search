@@ -8,18 +8,18 @@ La suite du travail doit maintenant fermer les écarts avec le sujet et approfon
 
 ## 1. État des exigences
 
-| Élément du sujet | État dans cette version | Preuve ou limite |
-| :--- | :--- | :--- |
-| Sous-ensemble regex demandé | Implémenté pour les opérateurs retenus | Parseur, tests de priorité et d’échappement |
-| Arbre → NFA avec ε | Implémenté | Construction structurelle et tests |
-| NFA → DFA par sous-ensembles | Implémenté | Tests de langage et de déterminisme |
-| DFA équivalent minimal | **À implémenter** | `DFAM.minimize` est une identité |
-| Recherche dans les lignes d’un fichier | Implémentée sous forme de comptage | Lecture bufferisée et tests sur fichiers |
-| Affichage des lignes comme egrep | **À compléter** | Aucun mode de sortie des lignes actuellement |
-| KMP expliqué et confronté aux automates | Présent | Chapitres 3 et 5, même mot et même corpus |
-| Comparaison des performances à egrep | Première campagne disponible | GNU grep sur macOS ; protocole de processus complets |
-| Tests et rapport argumenté | Présents, à maintenir | Exemples, génération, données brutes et figures |
-| Rapport final de 5 à 10 pages, 12 maximum | À composer pour le rendu | Cette documentation constitue la matière détaillée |
+| Élément du sujet                          | État dans cette version                | Preuve ou limite                                     |
+| :---------------------------------------- | :------------------------------------- | :--------------------------------------------------- |
+| Sous-ensemble regex demandé               | Implémenté pour les opérateurs retenus | Parseur, tests de priorité et d’échappement          |
+| Arbre → NFA avec ε                        | Implémenté                             | Construction structurelle et tests                   |
+| NFA → DFA par sous-ensembles              | Implémenté                             | Tests de langage et de déterminisme                  |
+| DFA équivalent minimal                    | **À implémenter**                      | `DFAM.minimize` est une identité                     |
+| Recherche dans les lignes d’un fichier    | Implémentée sous forme de comptage     | Lecture bufferisée et tests sur fichiers             |
+| Affichage des lignes comme egrep          | **À compléter**                        | Aucun mode de sortie des lignes actuellement         |
+| KMP expliqué et confronté aux automates   | Présent                                | Chapitres 3 et 5, même mot et même corpus            |
+| Comparaison des performances à egrep      | Première campagne disponible           | GNU grep sur macOS ; protocole de processus complets |
+| Tests et rapport argumenté                | Présents, à maintenir                  | Exemples, génération, données brutes et figures      |
+| Rapport final de 5 à 10 pages, 12 maximum | À composer pour le rendu               | Cette documentation constitue la matière détaillée   |
 
 Le sujet illustre une commande contenant `+`, mais son périmètre obligatoire énumère un sous-ensemble plus restreint. Le rapport et les exemples du projet s’en tiennent aux opérateurs réellement implémentés ; il ne faut pas présenter l’exemple illustratif du sujet comme une expression déjà supportée telle quelle.
 
@@ -40,7 +40,7 @@ La campagne pourra alors publier le nombre d’états et d’arcs avant/après, 
 
 ## 3. Compléter la sortie de recherche
 
-Un mode affichant les lignes, avec éventuellement leurs numéros, rapprochera l’interface de l’usage attendu d’egrep. Il permettra aussi de vérifier que les **mêmes lignes**, et pas seulement le même nombre de lignes, sont sélectionnées.
+Le mode `scripts/search.sh` affiche désormais les lignes avec leur numéro, ce qui rapproche l’interface de l’usage attendu d’egrep. Il permet de vérifier que les **mêmes lignes**, et pas seulement le même nombre de lignes, sont sélectionnées.
 
 Cette sortie devra rester séparée du protocole de comptage. Comparer un moteur qui imprime toutes les lignes à un autre qui n’imprime qu’un entier changerait le travail mesuré. Le contrôle exact des résultats peut s’effectuer avant le chronométrage, puis les deux commandes mesurées conserver le mode compteur.
 
@@ -52,14 +52,14 @@ Sur le parcours, une campagne dans une JVM persistante compléterait l’usage e
 
 Quelques familles de cas restent à étudier :
 
-| Axe | Pourquoi il est utile |
-| :--- | :--- |
-| Plusieurs livres et types de textes | Ne pas généraliser à partir d’une seule distribution de lignes |
-| Motifs plus longs et préfixes répétitifs | Étudier KMP et le coût du parseur au-delà des exemples courts |
-| Alternances et étoiles plus complexes | Mesurer le nombre de sous-ensembles accessibles |
-| Longues lignes isolées | Examiner les allocations de `readLine` et la mémoire maximale |
-| Différentes tailles de tampon | Justifier empiriquement le compromis des 64 K caractères |
-| Plusieurs campagnes et machines | Séparer une tendance robuste du bruit local |
+| Axe                                      | Pourquoi il est utile                                          |
+| :--------------------------------------- | :------------------------------------------------------------- |
+| Plusieurs livres et types de textes      | Ne pas généraliser à partir d’une seule distribution de lignes |
+| Motifs plus longs et préfixes répétitifs | Étudier KMP et le coût du parseur au-delà des exemples courts  |
+| Alternances et étoiles plus complexes    | Mesurer le nombre de sous-ensembles accessibles                |
+| Longues lignes isolées                   | Examiner les allocations de `readLine` et la mémoire maximale  |
+| Différentes tailles de tampon            | Justifier empiriquement le compromis des 64 K caractères       |
+| Plusieurs campagnes et machines          | Séparer une tendance robuste du bruit local                    |
 
 Les optimisations envisageables doivent être reliées à un coût identifié. Des fragments NFA assemblés dans un graphe commun éviteraient des recopies. Des identifiants d’états compacts et des ensembles de bits pourraient réduire les allocations pendant la déterminisation. Une simulation NFA ou une déterminisation à la demande pourraient éviter de construire tout le DFA avant de parcourir un petit fichier. Ces pistes ne sont ni implémentées ni mesurées dans cette version.
 
@@ -71,16 +71,16 @@ Le [sujet fourni](../src/main/java/com/sorbonne/specifications/daar_projet1.pdf)
 
 Un plan de synthèse de dix pages peut reprendre :
 
-| Pages indicatives | Matière à retenir |
-| :--- | :--- |
-| 1 | Objectif, définition de la recherche de facteur, périmètre réel |
-| 2 | Architecture et structures de données |
-| 3–4 | Arbre, NFA, déterminisation et gestion du point universel |
-| 5 | Recherche de facteur et KMP, avec coûts de préparation/parcours |
-| 6 | Minimisation : algorithme final ou limite explicitement déclarée |
-| 7 | Tests, générateurs, oracles et exemple de cas difficile |
-| 8–9 | Protocole, deux ou trois figures, résultats et discussion |
-| 10 | Limites, conclusion et références |
+| Pages indicatives | Matière à retenir                                                |
+| :---------------- | :--------------------------------------------------------------- |
+| 1                 | Objectif, définition de la recherche de facteur, périmètre réel  |
+| 2                 | Architecture et structures de données                            |
+| 3–4               | Arbre, NFA, déterminisation et gestion du point universel        |
+| 5                 | Recherche de facteur et KMP, avec coûts de préparation/parcours  |
+| 6                 | Minimisation : algorithme final ou limite explicitement déclarée |
+| 7                 | Tests, générateurs, oracles et exemple de cas difficile          |
+| 8–9               | Protocole, deux ou trois figures, résultats et discussion        |
+| 10                | Limites, conclusion et références                                |
 
 Les CSV complets, commandes détaillées et guides d’installation restent consultables dans l’archive. Ils n’ont pas besoin d’occuper les pages du rapport principal. L’objectif est qu’un lecteur puisse vérifier les affirmations sans être obligé de parcourir des dizaines de tableaux.
 

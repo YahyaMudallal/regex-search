@@ -9,6 +9,9 @@ Depuis la racine du dépôt :
 # Une mesure Java détaillée, sur le fichier original.
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth|Darcy' AUTO
 
+# Affichage des lignes correspondantes avec leur numéro, sans timings.
+./scripts/search.sh Samples/PrideAndPrejudice.txt 'Elizabeth|Darcy'
+
 # Comparaison des commandes Java et GNU grep -E.
 ./scripts/compare-egrep.sh Samples/PrideAndPrejudice.txt 'Elizabeth|Darcy'
 
@@ -22,8 +25,9 @@ fournis sont relatifs au **répertoire de l'appelant**. Toujours protéger la re
 les chemins contenant des espaces avec des guillemets.
 
 `run.sh` ne lance plus `Main` et n'installe plus le JAR dans le dépôt Maven local.
-Les scripts de benchmark compilent avant de lancer Java ; cette compilation est
-exclue des mesures. Ils ne relancent pas les tests : exécuter `./run.sh` au préalable.
+Les scripts de recherche et de benchmark compilent avant de lancer Java ; cette
+compilation est exclue des résultats affichés ou mesurés. Ils ne relancent pas les
+tests : exécuter `./run.sh` au préalable.
 
 ## Prérequis
 
@@ -113,7 +117,9 @@ Les exports sous `target/` sont supprimés par le prochain `./run.sh` (`mvn clea
 utiliser un autre `--output-dir` pour conserver une campagne.
 
 `lib/common.sh` partage les vérifications et `lib/compare_egrep.py` gère les mesures
-et statistiques. Le point d'entrée utilisateur reste le script Bash.
+et statistiques. Le point d'entrée utilisateur reste le script Bash. `search.sh`
+affiche les lignes au format `numéro:contenu`; `benchmark.sh` affiche les compteurs
+et les durées.
 
 ## Campagne et figures du rapport
 
