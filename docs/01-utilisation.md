@@ -6,7 +6,7 @@ Le chemin le plus court consiste à vérifier les outils, lancer les tests, puis
 
 ## 1. Environnement de travail
 
-Le projet est compilé pour Java 21. Il faut un **JDK complet** : une installation qui fournit seulement l’exécution de Java ne suffit pas, puisque Maven appelle aussi le compilateur. Les scripts utilisent le JDK désigné par `JAVA_HOME`. Si cette variable n’est pas définie, ils récupèrent le répertoire du `java` présent dans le `PATH`.
+Le projet est compilé pour Java 25. Il faut un **JDK complet** : une installation qui fournit seulement l’exécution de Java ne suffit pas, puisque Maven appelle aussi le compilateur. Les scripts utilisent le JDK désigné par `JAVA_HOME`. Si cette variable n’est pas définie, ils récupèrent le répertoire du `java` présent dans le `PATH`.
 
 ```bash
 java -version
@@ -15,7 +15,7 @@ mvn --version
 python3 --version
 ```
 
-Les versions minimales attendues sont Java 21, Maven 3.6.3 et Python 3.9. Le POM déclare JUnit 6.1.3, Maven Compiler Plugin 3.14.0, Surefire 3.5.3 et Maven JAR Plugin 3.4.2. Ces versions sont celles du dépôt ; elles ne constituent pas une recommandation générale d’utiliser la version la plus récente de chaque outil.
+Les versions minimales attendues sont Java 25, Maven 3.6.3 et Python 3.9. Le POM déclare JUnit 6.1.3, Maven Compiler Plugin 3.14.0, Surefire 3.5.3 et Maven JAR Plugin 3.4.2. Ces versions sont celles du dépôt ; elles ne constituent pas une recommandation générale d’utiliser la version la plus récente de chaque outil.
 
 Bash orchestre les commandes. Python ne participe pas à la recherche du motif : sa bibliothèque standard sert à chronométrer les processus, vérifier leurs sorties et calculer les statistiques. Sous Windows, un environnement Linux tel que WSL permet d’utiliser les scripts Bash ; la campagne publiée a été exécutée sous macOS arm64.
 
