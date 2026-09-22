@@ -1,6 +1,7 @@
 package com.sorbonne.automata;
 
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Représente un arc orienté entre deux états d'un automate.
@@ -22,7 +23,7 @@ public class Transition {
         /** Ne consomme aucun caractère ; représente un déplacement ε. */
         EPSILON,
 
-        /** Consomme un caractère quelconque ; représente le point universel. */
+        /** Consomme un caractère quelconque sauf les exclusions éventuelles. */
         ANY
     }
 
@@ -37,6 +38,9 @@ public class Transition {
 
     /** Caractère à lire pour {@link Type#CHARACTER}, ou {@code null} pour les autres types. */
     private final Character symbol;
+
+    /** Ensemble immuable de caractères exclus d'un arc ANY ; vide pour le point universel. */
+    private final Set<Character> excludedSymbols;
 
     /**
      * Crée une transition ε, qui change d'état sans consommer de caractère.
@@ -77,10 +81,26 @@ public class Transition {
      * @throws NullPointerException si l'un des deux états est nul
      */
     private Transition(State source, State destination, Type type, Character symbol) {
+        this(source, destination, type, symbol, Set.of());
+    }
+
+    /**
+     * Initialise un arc, en copiant ses exclusions pour empêcher leur modification.
+     * Coût O(x) pour x exclusions, sauf si l'ensemble immuable est réutilisable.
+     *
+     * @param source état de départ non nul
+     * @param destination état d'arrivée non nul
+     * @param type type fixé par les fabriques internes
+     * @param symbol symbole littéral ou null
+     * @param excludedSymbols caractères exclus, sans valeur nulle
+     */
+    private Transition(State source, State destination, Type type, Character symbol,
+            Set<Character> excludedSymbols) {
         this.source = Objects.requireNonNull(source, "L'état source est obligatoire");
         this.destination = Objects.requireNonNull(destination, "L'état destination est obligatoire");
         this.type = type;
         this.symbol = symbol;
+        this.excludedSymbols = Set.copyOf(excludedSymbols);
     }
 
     /**
@@ -93,6 +113,32 @@ public class Transition {
      */
     public static Transition any(State source, State destination) {
         return new Transition(source, destination, Type.ANY, null);
+    }
+
+    /**
+     * Crée un arc acceptant tout caractère sauf ceux explicitement exclus.
+     *
+     * <p>Il représente la classe « autres caractères » d'un DFA. Par exemple,
+     * un arc pour 'a' et un arc excluant 'a' sont disjoints : aucun ordre de
+     * priorité implicite n'est nécessaire. Coût O(x) pour x exclusions.</p>
+     *
+     * @param source état de départ non nul
+     * @param destination état d'arrivée non nul
+     * @param excludedSymbols caractères à exclure, ensemble non nul sans éléments nuls
+     * @return nouvel arc ANY muni d'exclusions immuables
+     * @throws NullPointerException si un argument requis ou une exclusion est nul
+     */
+    public static Transition anyExcept(State source, State destination, Set<Character> excludedSymbols) {
+        return new Transition(source, destination, Type.ANY, null, excludedSymbols);
+    }
+
+    /**
+     * Renvoie les exclusions de l'arc, sans copie ni modification possible.
+     *
+     * @return ensemble immuable, vide pour un point universel sans restriction ; coût O(1)
+     */
+    public Set<Character> getExcludedSymbols() {
+        return excludedSymbols;
     }
 
     /**
@@ -145,14 +191,16 @@ public class Transition {
      *
      * <p>Une transition ε renvoie toujours {@code false}, car elle ne consomme
      * rien, même si le caractère fourni est la lettre grecque {@code 'ε'}.
-     * Le type {@link Type#ANY} accepte toute valeur {@code char}, y compris
-     * un saut de ligne : le découpage du fichier en lignes appartient au moteur de recherche.</p>
+     * Le type {@link Type#ANY} accepte toute valeur {@code char} non exclue,
+     * y compris un saut de ligne : le découpage du fichier appartient au moteur.
+     * Coût moyen O(1), grâce à l'ensemble de hachage des exclusions.</p>
      *
      * @param character caractère du texte à comparer
      * @return {@code true} si le caractère peut être consommé, sinon {@code false}
      */
     public boolean matches(char character) {
-        return type == Type.ANY || (type == Type.CHARACTER && symbol == character);
+        return (type == Type.ANY && !excludedSymbols.contains(character))
+                || (type == Type.CHARACTER && symbol == character);
     }
 
     /**
@@ -164,7 +212,7 @@ public class Transition {
     public String toString() {
         String label = switch (type) {
             case EPSILON -> "ε";
-            case ANY -> ".";
+            case ANY -> excludedSymbols.isEmpty() ? "." : ". sauf " + excludedSymbols;
             case CHARACTER -> "'" + symbol + "'";
         };
 

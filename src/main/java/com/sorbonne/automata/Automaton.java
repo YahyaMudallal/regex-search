@@ -190,7 +190,8 @@ public class Automaton {
             for (Transition transition : outgoing) {
                 String label = switch (transition.getType()) {
                     case EPSILON -> "ε";
-                    case ANY -> ".";
+                    case ANY -> transition.getExcludedSymbols().isEmpty()
+                            ? "." : ". sauf " + transition.getExcludedSymbols();
                     case CHARACTER -> "'" + transition.getSymbol() + "'";
                 };
 
