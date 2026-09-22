@@ -13,11 +13,11 @@ import java.util.Objects;
  * la préparation prend {@code O(m)}, la recherche {@code O(n)}, et la mémoire
  * supplémentaire {@code O(m)}. La méthode s'arrête à la première occurrence.</p>
  *
- * <p>Cette classe respecte le contrat littéral de {@link SearchAlgorithm} :
+ * <p>Cette classe utilise un motif String littéral avec {@link SearchAlgorithm} :
  * elle n'interprète pas les expressions régulières. Aucun état n'est conservé
  * entre les appels ; une instance peut donc servir à plusieurs recherches.</p>
  */
-public class KMPSearch implements SearchAlgorithm {
+public class KMPSearch implements SearchAlgorithm<String> {
 
     /** Crée un moteur KMP sans configuration ni données de recherche partagées. */
     public KMPSearch() {

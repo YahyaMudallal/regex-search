@@ -20,7 +20,7 @@ import org.junit.jupiter.params.provider.MethodSource;
  */
 class KMPSearchTest {
     /** Moteur utilisé par les scénarios ; il ne conserve pas les recherches précédentes. */
-    private final SearchAlgorithm search = new KMPSearch();
+    private final SearchAlgorithm<String> search = new KMPSearch();
 
     /** Crée une instance de test avec son moteur KMP. */
     KMPSearchTest() {

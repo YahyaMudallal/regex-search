@@ -269,7 +269,7 @@ public class Main {
         System.out.println("KMP cherche des caractères consécutifs, en respectant la casse.");
 
         // Moteur concret utilisé à travers l'interface commune des recherches littérales.
-        SearchAlgorithm search = new KMPSearch();
+        SearchAlgorithm<String> search = new KMPSearch();
         printSearchResult(search, "bonjour monsieur bienvenue", "monsieur");
         printSearchResult(search, "bonjour monsieur bienvenue", "madame");
 
@@ -375,7 +375,7 @@ public class Main {
      * @param text texte de démonstration, non nul
      * @param pattern motif littéral, éventuellement vide mais non nul
      */
-    private static void printSearchResult(SearchAlgorithm search, String text, String pattern) {
+    private static void printSearchResult(SearchAlgorithm<String> search, String text, String pattern) {
         // Résultat de l'algorithme, calculé à chaque appel sur les données affichées.
         boolean found = search.search(text, pattern);
         System.out.printf("  Texte : \"%s\" | Motif : \"%s\" -> KMP : %s, String.contains : %s%n",

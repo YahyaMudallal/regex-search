@@ -33,7 +33,7 @@ import org.junit.jupiter.api.TestFactory;
  */
 class KMPSearchPropertyTest {
     /** Moteur testé, également utilisé à travers le contrat commun des recherches. */
-    private final SearchAlgorithm search = new KMPSearch();
+    private final SearchAlgorithm<String> search = new KMPSearch();
 
     /** Graine de base constante : changer cette valeur permet d'explorer d'autres exemples. */
     private static final long BASE_SEED = 20260921L;
