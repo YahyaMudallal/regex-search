@@ -1,5 +1,8 @@
 package com.sorbonne.regex;
 
+import java.util.List;
+import java.util.ArrayList;
+
 /**
  * Class representing a syntax tree returned by the {@link RegexParser}.
  */
@@ -49,23 +52,73 @@ public class SyntaxTree {
 
     @Override
     public String toString() {
-        if (nodeType == NodeType.LETTER) {
-            return letter;
+        return toTreeString(this, "", true);
+    }
+
+    /**
+     * Renders the syntax tree as a branch-based text representation.
+     *
+     * @param node current node to display
+     * @param prefix indentation already applied
+     * @param isTail true when this node is the last child of its parent
+     * @return a multi-line tree representation readable in a console
+     */
+    private String toTreeString(SyntaxTree node, String prefix, boolean isTail) {
+        if (node == null) {
+            return prefix + (isTail ? "└── " : "├── ") + "∅\n";
         }
-        if (nodeType == NodeType.DOT) {
+
+        StringBuilder builder = new StringBuilder();
+        String connector = isTail ? "└── " : "├── ";
+        builder.append(prefix).append(connector).append(getNodeLabel(node)).append("\n");
+
+        List<SyntaxTree> children = new ArrayList<>();
+        if (node.left != null) {
+            children.add(node.left);
+        }
+        if (node.right != null) {
+            children.add(node.right);
+        }
+
+        String childPrefix = prefix + (isTail ? "    " : "│   ");
+        for (int i = 0; i < children.size(); i++) {
+            boolean last = i == children.size() - 1;
+            builder.append(toTreeString(children.get(i), childPrefix, last));
+        }
+
+        return builder.toString();
+    }
+
+    /**
+     * Returns the label displayed for a node in the tree view.
+     *
+     * @param node the node whose label must be displayed
+     * @return readable symbol for the node type
+     */
+    private String getNodeLabel(SyntaxTree node) {
+        if (node.nodeType == NodeType.LETTER) {
+            return node.letter == null || node.letter.isEmpty() ? "∅" : node.letter;
+        }
+        if (node.nodeType == NodeType.DOT) {
             return ".";
         }
-        if (nodeType == NodeType.STAR) {
-            return left != null ? left.toString() + "*" : "*";
+        if (node.nodeType == NodeType.STAR) {
+            return "*";
         }
-        if (nodeType == NodeType.CONCATENATION) {
-            return ".(" + (left != null ? left.toString() : "") + "," + (right != null ? right.toString() : "") + ")";
+        if (node.nodeType == NodeType.CONCATENATION) {
+            return ".";
         }
-        if (nodeType == NodeType.ALTERNATION) {
-            return "|(" + (left != null ? left.toString() : "") + "," + (right != null ? right.toString() : "") + ")";
+        if (node.nodeType == NodeType.ALTERNATION) {
+            return "|";
         }
-        if (nodeType == NodeType.PROTECTION) {
-            return left != null ? left.toString() : "";
+        if (node.nodeType == NodeType.PROTECTION) {
+            return "PROTECTION";
+        }
+        if (node.nodeType == NodeType.OPEN_PARENTHESE) {
+            return "(";
+        }
+        if (node.nodeType == NodeType.CLOSE_PARENTHESE) {
+            return ")";
         }
         return "?";
     }

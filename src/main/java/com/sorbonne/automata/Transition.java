@@ -162,13 +162,13 @@ public class Transition {
      */
     @Override
     public String toString() {
-        // Étiquette lisible permettant de distinguer les trois types de transition.
         String label = switch (type) {
             case EPSILON -> "ε";
-            case ANY -> ". (universel)";
+            case ANY -> ".";
             case CHARACTER -> "'" + symbol + "'";
         };
-        return "(" + source.getLabel() + ") --" + label + "--> (" + destination.getLabel() + ")";
+
+        return source.getLabel() + " --" + label + "--> " + destination.getLabel();
     }
 
 }

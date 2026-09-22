@@ -4,6 +4,9 @@ import com.sorbonne.automata.Automaton;
 import com.sorbonne.automata.State;
 import com.sorbonne.automata.Status;
 import com.sorbonne.automata.Transition;
+import com.sorbonne.regex.RegexParser;
+import com.sorbonne.regex.SyntaxTree;
+import com.sorbonne.regex.NFA;
 
 /**
  * Point d'entrée progressif du projet de recherche par expression régulière.
@@ -32,6 +35,26 @@ public class Main {
         System.out.println("REGEX SEARCH — Projet DAAR");
         System.out.println("Démonstration de l'implémentation actuelle");
 
+        // ================================================================
+        // Pipeline complet à partir d'un regex
+        // ================================================================
+        try {
+            // construction d'un arbre syntaxique à partir d'une expression régulière
+        	System.out.println(" Construction d'un arbre syntaxique à partir du regex : a|bc* ");
+			SyntaxTree tree = RegexParser.parse("a|bc*");
+			System.out.println(tree.toString());
+            
+            //  construction d'un automate à partir de l'arbre syntaxique
+        	System.out.println(" Construction d'un arbre syntaxique à partir du regex : a|bc* ");
+            Automaton automaton = NFA.buildNFA(tree);
+            System.out.println("Automate construit à partir de l'arbre syntaxique :");
+            System.out.println(automaton.toString());
+            
+            
+		} catch (Exception e) {
+			e.printStackTrace();
+		}        
+        
         // ================================================================
         // PARTIE 1 — Construction et affichage d'un automate
         // ================================================================
@@ -164,7 +187,7 @@ public class Main {
         printSection("3. Suite du projet — à implémenter");
 
         // TODO : Ajouter une démonstration de RegexParser et SyntaxTree.
-        System.out.println("[À faire] Transformer une expression régulière en arbre syntaxique.");
+        System.out.println("[Fait] Transformer une expression régulière en arbre syntaxique.");
 
         // TODO : Construire le NFA depuis l'arbre avec la méthode Aho-Ullman.
         System.out.println("[À faire] Construire l'automate non déterministe avec transitions ε.");

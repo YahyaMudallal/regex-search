@@ -90,10 +90,10 @@ public class State {
     /**
      * Décrit l'état pour faciliter la lecture des traces de débogage.
      *
-     * @return texte au format {@code State(uuid, nom, statut)}
+     * @return texte lisible au format {@code nom [statut]}
      */
     @Override
     public String toString() {
-        return "State(" + this.uuid.toString() + ", " + this.label + ", " + this.status + ")";
+        return label + " [" + status + "]";
     }
 }

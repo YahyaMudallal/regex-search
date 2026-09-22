@@ -155,4 +155,56 @@ public class Automaton {
                 .filter(transition -> transition.getSource().equals(state))
                 .toList();
     }
+
+    /**
+     * Affiche le graphe sous une forme lisible pour le débogage et la démonstration.
+     *
+     * <p>Le rendu liste chaque état avec son rôle, puis ses transitions sortantes,
+     * ce qui permet de visualiser rapidement les branches et les boucles.</p>
+     *
+     * @return représentation textuelle de l'automate, organisée par état
+     */
+    @Override
+    public String toString() {
+        if (states.isEmpty()) {
+            return "Automaton {}";
+        }
+
+        StringBuilder builder = new StringBuilder();
+        builder.append("Automaton {\n");
+
+        for (State state : states) {
+            builder.append("  - ")
+                    .append(state.getLabel())
+                    .append(" [")
+                    .append(state.getStatus())
+                    .append("]");
+
+            List<Transition> outgoing = getOutgoingTransitions(state);
+            if (outgoing.isEmpty()) {
+                builder.append("\n");
+                continue;
+            }
+
+            builder.append("\n");
+            for (Transition transition : outgoing) {
+                String label = switch (transition.getType()) {
+                    case EPSILON -> "ε";
+                    case ANY -> ".";
+                    case CHARACTER -> "'" + transition.getSymbol() + "'";
+                };
+
+                builder.append("      ")
+                        .append(transition.getSource().getLabel())
+                        .append(" --")
+                        .append(label)
+                        .append("--> ")
+                        .append(transition.getDestination().getLabel())
+                        .append("\n");
+            }
+        }
+
+        builder.append("}");
+        return builder.toString();
+    }
 }

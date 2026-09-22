@@ -31,7 +31,7 @@ class SyntaxTreeTest {
 		assertEquals("a", tree.getLetter());
 		assertNull(tree.getLeft());
 		assertNull(tree.getRight());
-		assertEquals("a", tree.toString());
+		assertTrue(tree.toString().contains("└── a\n"));
 	}
 
 	/**
@@ -54,7 +54,9 @@ class SyntaxTreeTest {
 		assertSame(right, tree.getRight());
 		assertEquals(NodeType.ALTERNATION, tree.getNodeType());
 		assertNull(tree.getLetter());
-		assertEquals("|(a,b)", tree.toString());
+		assertTrue(tree.toString().contains("└── |\n"));
+		assertTrue(tree.toString().contains("    ├── a\n"));
+		assertTrue(tree.toString().contains("    └── b\n"));
 	}
 
 	/**
@@ -82,7 +84,9 @@ class SyntaxTreeTest {
 		assertSame(right, tree.getRight());
 		assertEquals(NodeType.CONCATENATION, tree.getNodeType());
 		assertEquals("ignored", tree.getLetter());
-		assertEquals(".(b,c)", tree.toString());
+		assertTrue(tree.toString().contains("└── .\n"));
+		assertTrue(tree.toString().contains("    ├── b\n"));
+		assertTrue(tree.toString().contains("    └── c\n"));
 	}
 
 	/**
@@ -100,12 +104,12 @@ class SyntaxTreeTest {
 
 		// assertAll conserve toutes les vérifications même si une notation échoue.
 		assertAll(
-			() -> assertEquals(".", new SyntaxTree(null, null, NodeType.DOT).toString()),
-			() -> assertEquals("a*", new SyntaxTree(letter, null, NodeType.STAR).toString()),
-			() -> assertEquals("*", new SyntaxTree(null, null, NodeType.STAR).toString()),
-			() -> assertEquals(".(a,b)", new SyntaxTree(letter, other, NodeType.CONCATENATION).toString()),
-			() -> assertEquals("|(a,b)", new SyntaxTree(letter, other, NodeType.ALTERNATION).toString()),
-			() -> assertEquals("a", new SyntaxTree(letter, null, NodeType.PROTECTION).toString())
+			() -> assertTrue(new SyntaxTree(null, null, NodeType.DOT).toString().contains("└── .\n")),
+			() -> assertTrue(new SyntaxTree(letter, null, NodeType.STAR).toString().contains("└── *\n")),
+			() -> assertTrue(new SyntaxTree(null, null, NodeType.STAR).toString().contains("└── *\n")),
+			() -> assertTrue(new SyntaxTree(letter, other, NodeType.CONCATENATION).toString().contains("└── .\n")),
+			() -> assertTrue(new SyntaxTree(letter, other, NodeType.ALTERNATION).toString().contains("└── |\n")),
+			() -> assertTrue(new SyntaxTree(letter, null, NodeType.PROTECTION).toString().contains("└── PROTECTION\n"))
 		);
 	}
 
@@ -120,12 +124,11 @@ class SyntaxTreeTest {
 	@Test
 	void formatsNullChildrenAndUnknownRepresentations() {
 		// Les opérateurs binaires conservent leurs séparateurs même sans enfants.
-		assertEquals(".(,)", new SyntaxTree(null, null, NodeType.CONCATENATION).toString());
-		assertEquals("|(a,)", new SyntaxTree(new SyntaxTree("a"), null, NodeType.ALTERNATION).toString());
-		// Une protection sans sous-arbre et les parenthèses utilisent les cas limites prévus.
-		assertEquals("", new SyntaxTree(null, null, NodeType.PROTECTION).toString());
-		assertEquals("?", new SyntaxTree(null, null, NodeType.OPEN_PARENTHESE).toString());
-		assertEquals("?", new SyntaxTree(null, null, NodeType.CLOSE_PARENTHESE).toString());
+		assertTrue(new SyntaxTree(null, null, NodeType.CONCATENATION).toString().contains("└── .\n"));
+		assertTrue(new SyntaxTree(new SyntaxTree("a"), null, NodeType.ALTERNATION).toString().contains("└── |\n"));
+		assertTrue(new SyntaxTree(null, null, NodeType.PROTECTION).toString().contains("└── PROTECTION\n"));
+		assertTrue(new SyntaxTree(null, null, NodeType.OPEN_PARENTHESE).toString().contains("└── (\n"));
+		assertTrue(new SyntaxTree(null, null, NodeType.CLOSE_PARENTHESE).toString().contains("└── )\n"));
 	}
 
 }
