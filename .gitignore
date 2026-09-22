@@ -33,6 +33,36 @@ buildNumber.properties
 .mvn/wrapper/maven-wrapper.jar
 
 # =========================
+# Scripts Python et figures : environnements et caches locaux
+# =========================
+__pycache__/
+*.py[cod]
+.venv*/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.mplconfig/
+
+# Configuration locale ; les exemples restent versionnables.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Fichiers temporaires et sauvegardes d'éditeur
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Les campagnes de travail et corpus dérivés vont dans target/ (déjà ignoré).
+# docs/results/ et docs/assets/ restent versionnés : ce sont les données
+# et figures publiées nécessaires pour vérifier et reproduire le rapport.
+
+# =========================
 # IDEs
 # =========================
 
