@@ -5,10 +5,12 @@ import com.sorbonne.automata.State;
 import com.sorbonne.automata.Status;
 import com.sorbonne.automata.Transition;
 import com.sorbonne.benchmark.Benchmark;
+import com.sorbonne.regex.DFA;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
 import com.sorbonne.search.KMPSearch;
+import com.sorbonne.search.NativeSearch;
 import com.sorbonne.search.SearchAlgorithm;
 import java.nio.file.Path;
 
@@ -17,7 +19,8 @@ import java.nio.file.Path;
  *
  * <p>Le programme démontre les fonctionnalités disponibles : construction manuelle
  * d'un automate, comparaison des types de transition, analyse d'expressions
- * régulières en arbres syntaxiques, recherche littérale par KMP et liste
+ * régulières en arbres syntaxiques, construction NFA puis DFA, recherche par automate,
+ * recherche littérale par KMP et liste
  * des fichiers texte du dossier {@code Samples}.
  * Les prochaines étapes sont annoncées à la fin de l'exécution.</p>
  *
@@ -48,23 +51,8 @@ public class Main {
         // ================================================================
         // Pipeline complet à partir d'un regex
         // ================================================================
-        try {
-            // construction d'un arbre syntaxique à partir d'une expression régulière
-        	System.out.println(" Construction d'un arbre syntaxique à partir du regex : a|bc* ");
-			SyntaxTree tree = RegexParser.parse("a|bc*");
-			System.out.println(tree.toString());
-            
-            //  construction d'un automate à partir de l'arbre syntaxique
-        	System.out.println(" Construction d'un arbre syntaxique à partir du regex : a|bc* ");
-            Automaton automaton = NFA.buildNFA(tree);
-            System.out.println("Automate construit à partir de l'arbre syntaxique :");
-            System.out.println(automaton.toString());
-            
-            
-		} catch (Exception e) {
-			e.printStackTrace();
-		}        
-        
+        demonstrateRegexPipeline();
+
         // ================================================================
         // PARTIE 1 — Construction et affichage d'un automate
         // ================================================================
@@ -97,6 +85,38 @@ public class Main {
     }
 
     // ====================================================================
+    // EXPRESSION RÉGULIÈRE → NFA → DFA → RECHERCHE
+    // ====================================================================
+
+    /**
+     * Construit un motif automate puis réutilise sa préparation sur plusieurs textes.
+     *
+     * <p>La préparation est séparée de la lecture pour ne pas déterminer un nouvel
+     * automate à chaque ligne. Le DFA représente des mots complets ; NativeSearch
+     * prépare la recherche d'une occurrence à n'importe quelle position.</p>
+     *
+     * @throws Exception si l'expression de démonstration ne peut pas être analysée
+     */
+    private static void demonstrateRegexPipeline() throws Exception {
+        printSection("Pipeline regex : arbre → NFA → DFA → recherche");
+        // Motif combinant une alternative, une concaténation et une étoile.
+        String expression = "a|bc*";
+        SyntaxTree tree = RegexParser.parse(expression);
+        Automaton nfa = NFA.buildNFA(tree);
+        Automaton dfa = DFA.convert(nfa);
+        System.out.println("Expression : " + expression);
+        System.out.println("Arbre : " + tree);
+        System.out.println("NFA :\n" + nfa);
+        System.out.println("DFA :\n" + dfa);
+
+        // La préparation peut être coûteuse ; elle est partagée entre toutes les lignes.
+        NativeSearch.Prepared prepared = NativeSearch.prepare(dfa);
+        for (String text : new String[] {"xxa", "xxbccc", "xxx", ""}) {
+            System.out.printf("  Texte : \"%s\" -> occurrence : %s%n", text, prepared.search(text));
+        }
+    }
+
+    // ====================================================================
     // CONSTRUCTION ET AFFICHAGE DU GRAPHE
     // ====================================================================
 
@@ -111,7 +131,7 @@ public class Main {
         printSection("1. Construction manuelle d'un automate");
         System.out.println("Motif illustré : ab*|c");
         System.out.println("Exemples de mots du langage : a, ab, abb, c.");
-        System.out.println("Le graphe est affiché ; la reconnaissance reste à implémenter.");
+        System.out.println("Ce graphe est construit manuellement ; le pipeline précédent montre la recherche par DFA.");
 
         // Graphe d'exemple contenant une branche, une boucle et une transition ε.
         Automaton automaton = createDemoAutomaton();
@@ -323,11 +343,9 @@ public class Main {
 
         System.out.println("[Fait] Transformer une expression régulière en arbre syntaxique.");
 
-        // TODO : Construire le NFA depuis l'arbre avec la méthode Aho-Ullman.
-        System.out.println("[À faire] Construire l'automate non déterministe avec transitions ε.");
+        System.out.println("[Fait] Construire le NFA avec transitions ε.");
 
-        // TODO : Déterminiser le NFA par la méthode des sous-ensembles.
-        System.out.println("[À faire] Convertir cet automate en automate déterministe (DFA).");
+        System.out.println("[Fait] Déterminiser le NFA en DFA avec classes de caractères disjointes.");
 
         // TODO : Implémenter la minimisation dans la classe DFAM encore vide.
         System.out.println("[À faire] Minimiser le nombre d'états du DFA.");
@@ -338,8 +356,7 @@ public class Main {
         // TODO : Relier KMP à la lecture ligne par ligne et au choix de l'algorithme.
         System.out.println("[À faire] Brancher KMP sur les fichiers pour les motifs littéraux.");
 
-        // TODO : Implémenter NativeSearch derrière l'interface SearchAlgorithm.
-        System.out.println("[À faire] Ajouter NativeSearch pour comparer les recherches littérales.");
+        System.out.println("[Fait] Rechercher avec NativeSearch et partager le contrat typé avec KMP.");
 
         // TODO : Comparer les résultats à egrep et mesurer les performances avec Benchmark.
         System.out.println("[À faire] Valider les résultats et comparer les performances.");

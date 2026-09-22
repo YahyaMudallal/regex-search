@@ -5,7 +5,7 @@ package com.sorbonne.search;
  *
  * <p>Le résultat vaut vrai si une sous-chaîne du texte appartient au langage du
  * motif. Pour {@link KMPSearch}, le motif est une String littérale ; pour
- * {@code NativeSearch}, c'est un automate déterministe représentant un langage.
+ * {@link NativeSearch}, c'est un automate déterministe représentant un langage.
  * Le paramètre générique empêche de confondre ces deux représentations.</p>
  *
  * <p>Les comparaisons portent sur les unités UTF-16 de {@link String}, sans
