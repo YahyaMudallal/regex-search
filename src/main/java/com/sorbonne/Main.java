@@ -6,6 +6,7 @@ import com.sorbonne.automata.Status;
 import com.sorbonne.automata.Transition;
 import com.sorbonne.benchmark.Benchmark;
 import com.sorbonne.regex.DFA;
+import com.sorbonne.regex.DFAM;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
@@ -13,6 +14,7 @@ import com.sorbonne.search.KMPSearch;
 import com.sorbonne.search.NativeSearch;
 import com.sorbonne.search.SearchAlgorithm;
 import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * Point d'entrée progressif du projet de recherche par expression régulière.
@@ -20,8 +22,7 @@ import java.nio.file.Path;
  * <p>Le programme démontre les fonctionnalités disponibles : construction manuelle
  * d'un automate, comparaison des types de transition, analyse d'expressions
  * régulières en arbres syntaxiques, construction NFA puis DFA, recherche par automate,
- * recherche littérale par KMP et liste
- * des fichiers texte du dossier {@code Samples}.
+ * recherche littérale par KMP et benchmark sur un fichier texte de {@code Samples}.
  * Les prochaines étapes sont annoncées à la fin de l'exécution.</p>
  *
  * <p>Le programme doit être lancé depuis la racine du projet pour accéder au
@@ -41,10 +42,29 @@ public class Main {
     /**
      * Exécute les démonstrations disponibles, puis présente les étapes à compléter.
      *
-     * @param args arguments de la ligne de commande, actuellement inutilisés
-     * @throws Exception si le parseur rejette une expression valide de la démonstration
+     * @param args aucun pour les démonstrations, ou fichier, regex et stratégie optionnelle
+     *             (AUTO, KMP ou AUTOMATON) pour une mesure seule ; préfixer par --count
+     *             pour afficher uniquement le nombre de lignes correspondantes
+     * @throws Exception si le motif est invalide ou si la lecture du fichier échoue
      */
     public static void main(String[] args) throws Exception {
+        if (args.length != 0) {
+            boolean countOnly = "--count".equals(args[0]);
+            int offset = countOnly ? 1 : 0;
+            int remaining = args.length - offset;
+            if (remaining < 2 || remaining > 3) {
+                throw new IllegalArgumentException("Usage : Main [--count] <fichier> <regex> [AUTO|KMP|AUTOMATON]");
+            }
+            Benchmark.Strategy strategy = remaining == 3
+                    ? Benchmark.Strategy.valueOf(args[offset + 2].toUpperCase(Locale.ROOT)) : Benchmark.Strategy.AUTO;
+            Benchmark.Result result = new Benchmark(Path.of(args[offset]), args[offset + 1], strategy).pipeline();
+            if (countOnly) {
+                System.out.println(result.matchingLines());
+            } else {
+                printBenchmarkResult(result);
+            }
+            return;
+        }
         System.out.println("REGEX SEARCH — Projet DAAR");
         System.out.println("Démonstration de l'implémentation actuelle");
 
@@ -74,7 +94,7 @@ public class Main {
         demonstrateKMPSearch();
 
         // ================================================================
-        // PARTIE 5 — Première étape du benchmark : fichiers texte
+        // PARTIE 5 — Benchmark : préparation et parcours d’un fichier texte
         // ================================================================
         demonstrateBenchmark();
 
@@ -85,7 +105,7 @@ public class Main {
     }
 
     // ====================================================================
-    // EXPRESSION RÉGULIÈRE → NFA → DFA → RECHERCHE
+    // EXPRESSION RÉGULIÈRE → NFA → DFA → DFAM → RECHERCHE
     // ====================================================================
 
     /**
@@ -98,19 +118,21 @@ public class Main {
      * @throws Exception si l'expression de démonstration ne peut pas être analysée
      */
     private static void demonstrateRegexPipeline() throws Exception {
-        printSection("Pipeline regex : arbre → NFA → DFA → recherche");
+        printSection("Pipeline regex : arbre → NFA → DFA → DFAM → recherche");
         // Motif combinant une alternative, une concaténation et une étoile.
         String expression = "a|bc*";
         SyntaxTree tree = RegexParser.parse(expression);
         Automaton nfa = NFA.buildNFA(tree);
         Automaton dfa = DFA.convert(nfa);
+        Automaton minimized = DFAM.minimize(dfa);
         System.out.println("Expression : " + expression);
         System.out.println("Arbre : " + tree);
         System.out.println("NFA :\n" + nfa);
         System.out.println("DFA :\n" + dfa);
 
         // La préparation peut être coûteuse ; elle est partagée entre toutes les lignes.
-        NativeSearch.Prepared prepared = NativeSearch.prepare(dfa);
+        System.out.println("DFAM : étape provisoire, le DFA est conservé tel quel.");
+        NativeSearch.Prepared prepared = NativeSearch.prepare(minimized);
         for (String text : new String[] {"xxa", "xxbccc", "xxx", ""}) {
             System.out.printf("  Texte : \"%s\" -> occurrence : %s%n", text, prepared.search(text));
         }
@@ -313,19 +335,41 @@ public class Main {
     // ====================================================================
 
     /**
-     * Lance le pipeline actuel du benchmark sur le dossier {@code Samples}.
-     *
-     * <p>Pour le moment, il affiche seulement les noms correspondant à
-     * {@code *.txt}, sans mesurer de performances. Le chemin est relatif
-     * à la racine du projet, depuis laquelle le programme doit être lancé.</p>
+     * Mesure deux moteurs sur le même mot, puis une expression avec alternative.
+     * Ces mesures uniques illustrent le pipeline ; elles ne constituent pas
+     * une comparaison statistique, notamment à cause de l'échauffement et du cache.
+     * @throws Exception si le fichier d'exemple est inaccessible ou le motif invalide
      */
-    private static void demonstrateBenchmark() {
-        printSection("5. Benchmark — fichiers texte du dossier Samples");
-        System.out.println("Listage des noms uniquement ; les mesures de performance restent à ajouter.");
+    private static void demonstrateBenchmark() throws Exception {
+        printSection("5. Benchmark — un fichier texte, lu ligne par ligne");
+        Path file = Path.of("Samples", "PrideAndPrejudice.txt");
+        printBenchmarkResult(new Benchmark(file, "Elizabeth").pipeline());
+        printBenchmarkResult(new Benchmark(file, "Elizabeth", Benchmark.Strategy.AUTOMATON).pipeline());
+        printBenchmarkResult(new Benchmark(file, "Elizabeth|Darcy").pipeline());
+    }
 
-        // Le filtre est un glob de noms de fichiers, pas une expression régulière.
-        Benchmark instance = new Benchmark(Path.of("Samples"), "*.txt");
-        instance.pipeline();
+    /**
+     * Présente une mesure terminée ; aucun affichage ne perturbe les chronomètres.
+     * Les nanosecondes sont converties en millisecondes uniquement pour la lecture.
+     * @param result compteurs et durées d'une exécution complète
+     */
+    private static void printBenchmarkResult(Benchmark.Result result) {
+        Benchmark.Timings time = result.timings();
+        System.out.printf("%nFichier : %s%nRegex : %s | Moteur : %s%n",
+                result.file(), result.pattern(), result.strategy());
+        System.out.printf("Lignes correspondantes : %d / %d%n", result.matchingLines(), result.totalLines());
+        System.out.printf("Préparation : %.3f ms (analyse : %.3f ; moteur : %.3f)%n",
+                time.preparationNanos() / 1_000_000.0, time.parsingNanos() / 1_000_000.0,
+                time.searchPreparationNanos() / 1_000_000.0);
+        if (result.strategy() == Benchmark.Strategy.AUTOMATON) {
+            System.out.printf("  NFA : %.3f ms | DFA : %.3f ms | DFAM provisoire : %.3f ms%n",
+                    time.nfaNanos() / 1_000_000.0, time.dfaNanos() / 1_000_000.0,
+                    time.minimizationNanos() / 1_000_000.0);
+            System.out.println("  Minimisation non implémentée : DFAM renvoie le même automate.");
+        }
+        System.out.printf("Lecture + recherche (IO incluses) : %.3f ms | Total : %.3f ms%n",
+                time.scanNanos() / 1_000_000.0, time.totalNanos() / 1_000_000.0);
+        System.out.println("Mesure unique ; échauffement et répétitions nécessaires pour comparer les performances.");
     }
 
     // ====================================================================
@@ -347,19 +391,19 @@ public class Main {
 
         System.out.println("[Fait] Déterminiser le NFA en DFA avec classes de caractères disjointes.");
 
-        // TODO : Implémenter la minimisation dans la classe DFAM encore vide.
+        // TODO : Implémenter la minimisation dans la classe DFAM à la place du placeholder.
         System.out.println("[À faire] Minimiser le nombre d'états du DFA.");
 
-        // TODO : Lire le motif et le chemin du fichier dans args, puis utiliser FileLoader.
+        // TODO : Ajouter un mode affichant les lignes, en dehors du benchmark chronométré.
         System.out.println("[À faire] Rechercher le motif et afficher les lignes correspondantes.");
 
-        // TODO : Relier KMP à la lecture ligne par ligne et au choix de l'algorithme.
-        System.out.println("[À faire] Brancher KMP sur les fichiers pour les motifs littéraux.");
+        // Le choix automatique repose sur l’arbre, pour respecter les caractères échappés.
+        System.out.println("[Fait] Lire un fichier bufferisé et choisir KMP pour les motifs littéraux.");
 
         System.out.println("[Fait] Rechercher avec NativeSearch et partager le contrat typé avec KMP.");
 
-        // TODO : Comparer les résultats à egrep et mesurer les performances avec Benchmark.
-        System.out.println("[À faire] Valider les résultats et comparer les performances.");
+        // TODO : Échauffer, répéter, calculer les statistiques et comparer à egrep.
+        System.out.println("[À faire] Répéter les mesures et comparer les résultats et performances à egrep.");
     }
 
     // ====================================================================

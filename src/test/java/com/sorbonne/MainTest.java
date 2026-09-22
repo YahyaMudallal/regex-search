@@ -1,0 +1,74 @@
+package com.sorbonne;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceLock;
+
+/** Vérifie la sortie de comptage utilisée par les scripts, sans dépendre de l'affichage humain. */
+@ResourceLock("SYSTEM_OUT")
+class MainTest {
+    /** Répertoire isolé pour les fichiers passés au point d'entrée. */
+    @TempDir
+    Path directory;
+
+    /** Crée les tests de l'interface en ligne de commande. */
+    MainTest() {
+    }
+
+    /**
+     * Chaque stratégie affiche uniquement le compte, sans titre ni chronométrage.
+     * @throws Exception si le fichier ou le pipeline échoue
+     */
+    @Test
+    void countModePrintsOnlyMatchingLineCount() throws Exception {
+        Path file = Files.writeString(directory.resolve("texte avec espaces.txt"), "ab ab\nx\nab");
+        for (String strategy : new String[] {"AUTO", "KMP", "AUTOMATON"}) {
+            assertEquals("2" + System.lineSeparator(), capture("--count", file.toString(), "ab", strategy));
+        }
+    }
+
+    /**
+     * Aucun résultat reste une exécution réussie qui affiche zéro.
+     * @throws Exception si la recherche échoue
+     */
+    @Test
+    void countModeSupportsNoMatchesAndEmptyFile() throws Exception {
+        Path file = Files.writeString(directory.resolve("empty.txt"), "");
+        assertEquals("0" + System.lineSeparator(), capture("--count", file.toString(), "a*"));
+        Files.writeString(file, "bbb\nccc");
+        assertEquals("0" + System.lineSeparator(), capture("--count", file.toString(), "a"));
+    }
+
+    /** Vérifie qu'une commande incomplète n'est pas exécutée comme une démonstration. */
+    @Test
+    @SuppressWarnings({"ThrowableResultIgnored", "ThrowableResultOfMethodCallIgnored"})
+    void countModeRequiresFileAndPattern() {
+        assertThrows(IllegalArgumentException.class, () -> Main.main(new String[] {"--count"}));
+    }
+
+    /**
+     * Capture temporairement stdout, puis restaure systématiquement le flux partagé.
+     * @param arguments paramètres de Main
+     * @return sortie exacte du programme
+     * @throws Exception si Main signale une erreur
+     */
+    private static String capture(String... arguments) throws Exception {
+        PrintStream original = System.out;
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (PrintStream output = new PrintStream(bytes, true, StandardCharsets.UTF_8)) {
+            System.setOut(output);
+            Main.main(arguments);
+        } finally {
+            System.setOut(original);
+        }
+        return bytes.toString(StandardCharsets.UTF_8);
+    }
+}
