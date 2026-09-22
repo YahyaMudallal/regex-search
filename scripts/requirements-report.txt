@@ -1,0 +1,2 @@
+# Dépendance optionnelle pour les figures du rapport ; Python 3.11 ou supérieur.
+matplotlib==3.11.2
