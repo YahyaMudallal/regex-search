@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.stream.Stream;
+import java.util.Random;
+import com.sorbonne.support.SearchGenerators;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -139,6 +141,36 @@ class KMPSearchTest {
         assertTrue(search.search("", ""));
         assertThrows(NullPointerException.class, () -> search.search(null, "a"));
         assertTrue(search.search("bonjour monsieur", "monsieur"));
+    }
+
+    /**
+     * Réutilise les tables préparées sur des textes générés et compare à String.contains.
+     * Les préfixes répétés sollicitent les replis ; les appels ne partagent aucun indice.
+     */
+    @Test
+    void reusesPreparedPatternsOnGeneratedTexts() {
+        Random random = new Random(20_260_922L);
+        for (String pattern : new String[] {"", "a", "ababac", "aaaaab", "é.", "😀"}) {
+            KMPSearch.Prepared prepared = KMPSearch.prepare(pattern);
+            for (int i = 0; i < 100; i++) {
+                String text = SearchGenerators.text(random, 120, "aaaabbcé.");
+                assertEquals(text.contains(pattern), prepared.search(text));
+                assertTrue(prepared.search(text + pattern));
+                assertEquals(pattern.isEmpty(), prepared.search(""));
+            }
+        }
+    }
+
+    /** Vérifie les arguments nuls et la réutilisation d'un moteur préparé après une erreur. */
+    @Test
+    @SuppressWarnings({"ThrowableResultIgnored", "ThrowableResultOfMethodCallIgnored"})
+    void preparedSearchRejectsNull() {
+        assertThrows(NullPointerException.class, () -> KMPSearch.prepare(null));
+        KMPSearch.Prepared prepared = KMPSearch.prepare("ab");
+        assertThrows(NullPointerException.class, () -> prepared.search(null));
+        assertTrue(prepared.search("xxab"));
+        assertFalse(prepared.search("a"));
+        assertFalse(prepared.search("b"));
     }
 
     // ====================================================================

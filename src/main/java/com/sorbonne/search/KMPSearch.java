@@ -15,7 +15,8 @@ import java.util.Objects;
  *
  * <p>Cette classe utilise un motif String littéral avec {@link SearchAlgorithm} :
  * elle n'interprète pas les expressions régulières. Aucun état n'est conservé
- * entre les appels ; une instance peut donc servir à plusieurs recherches.</p>
+ * entre les appels ; une instance peut donc servir à plusieurs recherches.
+ * Pour partager la préparation entre plusieurs textes, utiliser {@link #prepare(String)}.</p>
  */
 public class KMPSearch implements SearchAlgorithm<String> {
 
@@ -34,37 +35,75 @@ public class KMPSearch implements SearchAlgorithm<String> {
     @Override
     public boolean search(String text, String pattern) {
         Objects.requireNonNull(text, "Le texte ne doit pas être nul");
-        Objects.requireNonNull(pattern, "Le motif ne doit pas être nul");
-        if (pattern.isEmpty()) {
-            return true;
+        return prepare(pattern).search(text);
+    }
+
+    /**
+     * Prépare une fois la table LPS pour rechercher le même motif dans plusieurs lignes.
+     * La construction coûte O(m) en temps et en mémoire pour m unités UTF-16.
+     * @param pattern motif littéral non nul, éventuellement vide
+     * @return moteur immuable réutilisable, y compris entre plusieurs threads
+     * @throws NullPointerException si le motif est nul
+     */
+    public static Prepared prepare(String pattern) {
+        return new Prepared(Objects.requireNonNull(pattern, "Le motif ne doit pas être nul"));
+    }
+
+    /** Motif et table LPS partagés ; les positions de recherche restent locales à chaque appel. */
+    public static final class Prepared {
+        /** Motif littéral dont les préfixes ont été calculés. */
+        private final String pattern;
+        /** Table privée des préfixes réutilisables, jamais modifiée après construction. */
+        private final int[] lps;
+
+        /**
+         * Construit le moteur à partir d'un motif déjà validé.
+         * @param pattern motif non nul
+         */
+        private Prepared(String pattern) {
+            this.pattern = pattern;
+            this.lps = buildLPS(pattern);
         }
 
-        // Pour chaque position du motif, longueur du préfixe réutilisable après un échec.
-        int[] lps = buildLPS(pattern);
-        // Position du prochain caractère à comparer dans le texte ; elle ne recule jamais.
-        int i = 0;
-        // Position dans le motif, également égale au nombre de caractères déjà reconnus.
-        int j = 0;
-
-        while (i < text.length()) {
-            if (text.charAt(i) == pattern.charAt(j)) {
-                i++;
-                j++;
+        /**
+         * Cherche une occurrence sans reconstruire la table ni conserver d'état entre les lignes.
+         * Le coût est O(n) pour n unités UTF-16, avec O(1) de mémoire supplémentaire :
+         * l'indice du texte ne recule jamais et les replis sont amortis sur les avancées.
+         * @param text texte non nul
+         * @return vrai dès la première occurrence, toujours vrai pour un motif vide
+         * @throws NullPointerException si le texte est nul
+         */
+        public boolean search(String text) {
+            Objects.requireNonNull(text, "Le texte ne doit pas être nul");
+            if (pattern.isEmpty()) {
+                return true;
             }
 
-            if (j == pattern.length()) {
-                return true;
-            } else if (i < text.length() && text.charAt(i) != pattern.charAt(j)) {
-                if (j != 0) {
-                    // Réutiliser le plus long préfixe du motif qui termine la partie reconnue.
-                    j = lps[j - 1];
-                } else {
-                    // Aucun préfixe à réutiliser : essayer le caractère suivant du texte.
+            // Position du prochain caractère à comparer dans le texte ; elle ne recule jamais.
+            int i = 0;
+            // Position dans le motif, également égale au nombre de caractères déjà reconnus.
+            int j = 0;
+
+            while (i < text.length()) {
+                if (text.charAt(i) == pattern.charAt(j)) {
                     i++;
+                    j++;
+                }
+
+                if (j == pattern.length()) {
+                    return true;
+                } else if (i < text.length() && text.charAt(i) != pattern.charAt(j)) {
+                    if (j != 0) {
+                        // Réutiliser le plus long préfixe du motif qui termine la partie reconnue.
+                        j = lps[j - 1];
+                    } else {
+                        // Aucun préfixe à réutiliser : essayer le caractère suivant du texte.
+                        i++;
+                    }
                 }
             }
+            return false;
         }
-        return false;
     }
 
     /**
@@ -80,7 +119,7 @@ public class KMPSearch implements SearchAlgorithm<String> {
      * @param pattern motif non nul, validé par la méthode appelante
      * @return table de même longueur que le motif, vide si le motif est vide
      */
-    private int[] buildLPS(String pattern) {
+    private static int[] buildLPS(String pattern) {
         // Table calculée progressivement de gauche à droite.
         int[] lps = new int[pattern.length()];
         // Longueur du préfixe candidat, également utilisée comme indice de comparaison.
