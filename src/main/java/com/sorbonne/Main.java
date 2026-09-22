@@ -1,5 +1,8 @@
 package com.sorbonne;
 
+import java.nio.file.Path;
+import java.util.Locale;
+
 import com.sorbonne.automata.Automaton;
 import com.sorbonne.automata.State;
 import com.sorbonne.automata.Status;
@@ -13,20 +16,24 @@ import com.sorbonne.regex.SyntaxTree;
 import com.sorbonne.search.KMPSearch;
 import com.sorbonne.search.NativeSearch;
 import com.sorbonne.search.SearchAlgorithm;
-import java.nio.file.Path;
-import java.util.Locale;
 
 /**
  * Point d'entrée progressif du projet de recherche par expression régulière.
  *
- * <p>Le programme démontre les fonctionnalités disponibles : construction manuelle
+ * <p>
+ * Le programme démontre les fonctionnalités disponibles : construction manuelle
  * d'un automate, comparaison des types de transition, analyse d'expressions
- * régulières en arbres syntaxiques, construction NFA puis DFA, recherche par automate,
- * recherche littérale par KMP et benchmark sur un fichier texte de {@code Samples}.
- * Les prochaines étapes sont annoncées à la fin de l'exécution.</p>
+ * régulières en arbres syntaxiques, construction NFA puis DFA, recherche par
+ * automate,
+ * recherche littérale par KMP et benchmark sur un fichier texte de
+ * {@code Samples}.
+ * Les prochaines étapes sont annoncées à la fin de l'exécution.
+ * </p>
  *
- * <p>Le programme doit être lancé depuis la racine du projet pour accéder au
- * dossier {@code Samples} utilisé par la démonstration du benchmark.</p>
+ * <p>
+ * Le programme doit être lancé depuis la racine du projet pour accéder au
+ * dossier {@code Samples} utilisé par la démonstration du benchmark.
+ * </p>
  */
 public class Main {
     /** Ligne utilisée dans la console pour séparer visuellement les sections. */
@@ -42,22 +49,34 @@ public class Main {
     /**
      * Exécute les démonstrations disponibles, puis présente les étapes à compléter.
      *
-     * @param args aucun pour les démonstrations, ou fichier, regex et stratégie optionnelle
-     *             (AUTO, KMP ou AUTOMATON) pour une mesure seule ; préfixer par --count
-     *             pour afficher uniquement le nombre de lignes correspondantes
+     * @param args aucun pour les démonstrations, ou fichier, regex et stratégie
+     *             optionnelle
+     *             (AUTO, KMP ou AUTOMATON) pour une mesure seule ; préfixer par
+     *             --count
+     *             pour afficher uniquement le nombre de lignes correspondantes, ou
+     *             par
+     *             --print pour afficher les lignes correspondantes avec leur numéro
      * @throws Exception si le motif est invalide ou si la lecture du fichier échoue
      */
     public static void main(String[] args) throws Exception {
         if (args.length != 0) {
             boolean countOnly = "--count".equals(args[0]);
-            int offset = countOnly ? 1 : 0;
+            boolean printLines = "--print".equals(args[0]);
+            int offset = countOnly || printLines ? 1 : 0;
             int remaining = args.length - offset;
             if (remaining < 2 || remaining > 3) {
-                throw new IllegalArgumentException("Usage : Main [--count] <fichier> <regex> [AUTO|KMP|AUTOMATON]");
+                throw new IllegalArgumentException(
+                        "Usage : Main [--count|--print] <fichier> <regex> [AUTO|KMP|AUTOMATON]");
             }
             Benchmark.Strategy strategy = remaining == 3
-                    ? Benchmark.Strategy.valueOf(args[offset + 2].toUpperCase(Locale.ROOT)) : Benchmark.Strategy.AUTO;
-            Benchmark.Result result = new Benchmark(Path.of(args[offset]), args[offset + 1], strategy).pipeline();
+                    ? Benchmark.Strategy.valueOf(args[offset + 2].toUpperCase(Locale.ROOT))
+                    : Benchmark.Strategy.AUTO;
+            Benchmark benchmark = new Benchmark(Path.of(args[offset]), args[offset + 1], strategy);
+            if (printLines) {
+                benchmark.forEachMatchingLine((lineNumber, line) -> System.out.println(lineNumber + ":" + line));
+                return;
+            }
+            Benchmark.Result result = benchmark.pipeline();
             if (countOnly) {
                 System.out.println(result.matchingLines());
             } else {
@@ -109,11 +128,14 @@ public class Main {
     // ====================================================================
 
     /**
-     * Construit un motif automate puis réutilise sa préparation sur plusieurs textes.
+     * Construit un motif automate puis réutilise sa préparation sur plusieurs
+     * textes.
      *
-     * <p>La préparation est séparée de la lecture pour ne pas déterminer un nouvel
+     * <p>
+     * La préparation est séparée de la lecture pour ne pas déterminer un nouvel
      * automate à chaque ligne. Le DFA représente des mots complets ; NativeSearch
-     * prépare la recherche d'une occurrence à n'importe quelle position.</p>
+     * prépare la recherche d'une occurrence à n'importe quelle position.
+     * </p>
      *
      * @throws Exception si l'expression de démonstration ne peut pas être analysée
      */
@@ -130,10 +152,11 @@ public class Main {
         System.out.println("NFA :\n" + nfa);
         System.out.println("DFA :\n" + dfa);
 
-        // La préparation peut être coûteuse ; elle est partagée entre toutes les lignes.
+        // La préparation peut être coûteuse ; elle est partagée entre toutes les
+        // lignes.
         System.out.println("DFAM : étape provisoire, le DFA est conservé tel quel.");
         NativeSearch.Prepared prepared = NativeSearch.prepare(minimized);
-        for (String text : new String[] {"xxa", "xxbccc", "xxx", ""}) {
+        for (String text : new String[] { "xxa", "xxbccc", "xxx", "" }) {
             System.out.printf("  Texte : \"%s\" -> occurrence : %s%n", text, prepared.search(text));
         }
     }
@@ -145,9 +168,11 @@ public class Main {
     /**
      * Construit un exemple d'automate et affiche ses états et ses transitions.
      *
-     * <p>L'exemple représente le motif {@code ab*|c} : soit un {@code a} suivi
+     * <p>
+     * L'exemple représente le motif {@code ab*|c} : soit un {@code a} suivi
      * de zéro ou plusieurs {@code b}, soit un {@code c}. Le graphe est construit
-     * à la main ; aucun analyseur d'expression régulière n'est encore appelé.</p>
+     * à la main ; aucun analyseur d'expression régulière n'est encore appelé.
+     * </p>
      */
     private static void demonstrateAutomaton() {
         printSection("1. Construction manuelle d'un automate");
@@ -172,7 +197,8 @@ public class Main {
         }
 
         System.out.println("\nTransitions (" + automaton.getTransitions().size() + ") :");
-        // Arc du graphe ; son affichage indique la source, le symbole et la destination.
+        // Arc du graphe ; son affichage indique la source, le symbole et la
+        // destination.
         for (Transition transition : automaton.getTransitions()) {
             System.out.println("  " + transition);
         }
@@ -195,8 +221,10 @@ public class Main {
     /**
      * Crée le graphe utilisé par la démonstration du motif {@code ab*|c}.
      *
-     * <p>Le premier chemin lit {@code a}, boucle sur {@code b}, puis rejoint
-     * l'état final par ε. Le second chemin lit directement {@code c}.</p>
+     * <p>
+     * Le premier chemin lit {@code a}, boucle sur {@code b}, puis rejoint
+     * l'état final par ε. Le second chemin lit directement {@code c}.
+     * </p>
      *
      * @return nouvel automate avec trois états et quatre transitions
      */
@@ -224,9 +252,11 @@ public class Main {
     /**
      * Compare un point littéral, un point universel et une transition ε.
      *
-     * <p>Ces transitions sont indépendantes du graphe de la première partie.
+     * <p>
+     * Ces transitions sont indépendantes du graphe de la première partie.
      * Les appels à {@link Transition#matches(char)} vérifient un seul caractère,
-     * sans effectuer de reconnaissance d'un mot complet.</p>
+     * sans effectuer de reconnaissance d'un mot complet.
+     * </p>
      */
     private static void demonstrateTransitionTypes() {
         printSection("2. Les trois types de transition");
@@ -259,11 +289,14 @@ public class Main {
     // ====================================================================
 
     /**
-     * Analyse plusieurs expressions et affiche les nœuds de leurs arbres syntaxiques.
+     * Analyse plusieurs expressions et affiche les nœuds de leurs arbres
+     * syntaxiques.
      *
-     * <p>Les exemples couvrent la priorité des opérateurs, les parenthèses,
+     * <p>
+     * Les exemples couvrent la priorité des opérateurs, les parenthèses,
      * le point universel et le point échappé. Une expression incorrecte illustre
-     * ensuite le signalement d'une erreur de syntaxe.</p>
+     * ensuite le signalement d'une erreur de syntaxe.
+     * </p>
      *
      * @throws Exception si une expression valide de la démonstration est rejetée
      */
@@ -273,7 +306,7 @@ public class Main {
         System.out.println("Les types des nœuds distinguent le point universel du point littéral.");
 
         // Expressions valides illustrant les opérateurs actuellement pris en charge.
-        String[] expressions = {"ab*|c", "a(b|c)*", "a.b", "a\\.b"};
+        String[] expressions = { "ab*|c", "a(b|c)*", "a.b", "a\\.b" };
         for (String expression : expressions) {
             // Arbre construit par le parseur à partir de l'expression courante.
             SyntaxTree tree = RegexParser.parse(expression);
@@ -288,7 +321,8 @@ public class Main {
         try {
             RegexParser.parse(invalidExpression);
         } catch (Exception error) {
-            // Erreur attendue pour cet exemple ; les autres démonstrations peuvent continuer.
+            // Erreur attendue pour cet exemple ; les autres démonstrations peuvent
+            // continuer.
             System.out.println("  Erreur de syntaxe détectée : " + error.getMessage());
             return;
         }
@@ -302,15 +336,19 @@ public class Main {
     /**
      * Démontre la recherche KMP sur des exemples simples et quelques cas limites.
      *
-     * <p>La même instance est réutilisée via {@link SearchAlgorithm}. Chaque résultat
-     * est affiché avec celui de {@link String#contains(CharSequence)} comme référence.
-     * Il ne s'agit pas d'un benchmark : aucun temps n'est mesuré.</p>
+     * <p>
+     * La même instance est réutilisée via {@link SearchAlgorithm}. Chaque résultat
+     * est affiché avec celui de {@link String#contains(CharSequence)} comme
+     * référence.
+     * Il ne s'agit pas d'un benchmark : aucun temps n'est mesuré.
+     * </p>
      */
     private static void demonstrateKMPSearch() {
         printSection("4. Recherche littérale avec KMP");
         System.out.println("KMP cherche des caractères consécutifs, en respectant la casse.");
 
-        // Moteur concret utilisé à travers l'interface commune des recherches littérales.
+        // Moteur concret utilisé à travers l'interface commune des recherches
+        // littérales.
         SearchAlgorithm<String> search = new KMPSearch();
         printSearchResult(search, "bonjour monsieur bienvenue", "monsieur");
         printSearchResult(search, "bonjour monsieur bienvenue", "madame");
@@ -338,7 +376,9 @@ public class Main {
      * Mesure deux moteurs sur le même mot, puis une expression avec alternative.
      * Ces mesures uniques illustrent le pipeline ; elles ne constituent pas
      * une comparaison statistique, notamment à cause de l'échauffement et du cache.
-     * @throws Exception si le fichier d'exemple est inaccessible ou le motif invalide
+     * 
+     * @throws Exception si le fichier d'exemple est inaccessible ou le motif
+     *                   invalide
      */
     private static void demonstrateBenchmark() throws Exception {
         printSection("5. Benchmark — un fichier texte, lu ligne par ligne");
@@ -351,6 +391,7 @@ public class Main {
     /**
      * Présente une mesure terminée ; aucun affichage ne perturbe les chronomètres.
      * Les nanosecondes sont converties en millisecondes uniquement pour la lecture.
+     * 
      * @param result compteurs et durées d'une exécution complète
      */
     private static void printBenchmarkResult(Benchmark.Result result) {
@@ -379,8 +420,10 @@ public class Main {
     /**
      * Affiche les modules à intégrer aux prochaines versions du programme.
      *
-     * <p>Cette liste décrit le travail restant. Elle n'appelle aucun module
-     * encore vide et n'annonce aucun résultat de recherche ou de performance.</p>
+     * <p>
+     * Cette liste décrit le travail restant. Elle n'appelle aucun module
+     * encore vide et n'annonce aucun résultat de recherche ou de performance.
+     * </p>
      */
     private static void printNextSteps() {
         printSection("6. Suite du projet — à implémenter");
@@ -391,13 +434,14 @@ public class Main {
 
         System.out.println("[Fait] Déterminiser le NFA en DFA avec classes de caractères disjointes.");
 
-        // TODO : Implémenter la minimisation dans la classe DFAM à la place du placeholder.
+        // TODO : Implémenter la minimisation dans la classe DFAM à la place du
+        // placeholder.
         System.out.println("[À faire] Minimiser le nombre d'états du DFA.");
 
-        // TODO : Ajouter un mode affichant les lignes, en dehors du benchmark chronométré.
-        System.out.println("[À faire] Rechercher le motif et afficher les lignes correspondantes.");
+        System.out.println("[Fait] Afficher les lignes correspondantes hors du benchmark chronométré.");
 
-        // Le choix automatique repose sur l’arbre, pour respecter les caractères échappés.
+        // Le choix automatique repose sur l’arbre, pour respecter les caractères
+        // échappés.
         System.out.println("[Fait] Lire un fichier bufferisé et choisir KMP pour les motifs littéraux.");
 
         System.out.println("[Fait] Rechercher avec NativeSearch et partager le contrat typé avec KMP.");
@@ -413,12 +457,14 @@ public class Main {
     /**
      * Affiche récursivement le type des nœuds et la valeur des feuilles d'un arbre.
      *
-     * @param tree nœud courant, non nul
-     * @param indentation espaces placés avant la ligne pour représenter la profondeur
-     * @param role rôle du nœud : racine, enfant gauche ou enfant droit
+     * @param tree        nœud courant, non nul
+     * @param indentation espaces placés avant la ligne pour représenter la
+     *                    profondeur
+     * @param role        rôle du nœud : racine, enfant gauche ou enfant droit
      */
     private static void printSyntaxTree(SyntaxTree tree, String indentation, String role) {
-        // Une lettre est affichée entre guillemets ; les opérateurs n'ont pas de valeur littérale.
+        // Une lettre est affichée entre guillemets ; les opérateurs n'ont pas de valeur
+        // littérale.
         String literal = tree.getLetter() == null ? "" : " \"" + tree.getLetter() + "\"";
         System.out.println(indentation + role + " : " + tree.getNodeType() + literal);
         if (tree.getLeft() != null) {
@@ -430,10 +476,11 @@ public class Main {
     }
 
     /**
-     * Affiche le résultat réel d'une recherche et celui de la recherche native Java.
+     * Affiche le résultat réel d'une recherche et celui de la recherche native
+     * Java.
      *
-     * @param search algorithme littéral utilisé, non nul
-     * @param text texte de démonstration, non nul
+     * @param search  algorithme littéral utilisé, non nul
+     * @param text    texte de démonstration, non nul
      * @param pattern motif littéral, éventuellement vide mais non nul
      */
     private static void printSearchResult(SearchAlgorithm<String> search, String text, String pattern) {

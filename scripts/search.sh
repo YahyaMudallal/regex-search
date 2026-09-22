@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Affiche les lignes correspondant à une expression régulière, avec leur numéro.
+set -Eeuo pipefail
+# shellcheck source=scripts/lib/common.sh
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
+if [[ $# -eq 1 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
+    printf "Usage : %s <fichier> <regex> [AUTO|KMP|AUTOMATON]\n" "$0"
+    exit 0
+fi
+[[ $# -ge 2 && $# -le 3 ]] || fail "Usage : $0 <fichier> <regex> [AUTO|KMP|AUTOMATON]"
+[[ -f "$1" ]] || fail "Fichier introuvable ou non ordinaire : $1"
+input_file="$(cd -- "$(dirname -- "$1")" && pwd)/$(basename -- "$1")"
+shift
+check_requirements >/dev/null
+build_main >/dev/null
+exec "$JAVA_HOME/bin/java" -cp "$PROJECT_ROOT/target/classes" com.sorbonne.Main --print "$input_file" "$@"

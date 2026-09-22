@@ -66,6 +66,9 @@ venv/
 # IDEs
 # =========================
 
+# Artefacts temporaires des outils de modernisation
+.github/modernize/
+
 # IntelliJ IDEA
 .idea/
 *.iml
