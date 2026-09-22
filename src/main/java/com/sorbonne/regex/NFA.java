@@ -1,25 +1,26 @@
 package com.sorbonne.regex;
 
+import java.util.Objects;
+import java.util.Set;
+
 import com.sorbonne.automata.Automaton;
 import com.sorbonne.automata.State;
 import com.sorbonne.automata.Status;
 import com.sorbonne.automata.Transition;
-import com.sorbonne.regex.NodeType;
-import com.sorbonne.regex.SyntaxTree;
-
-import java.util.Objects;
-import java.util.Set;
 
 /**
- * Fabrique construisant un automate non déterministe avec transitions epsilon (epsilon-NFA)
- * à partir d'un arbre syntaxique abstrait, suivant la construction d'Aho-Ullman (Chapitre 10).
+ * Fabrique construisant un automate non déterministe avec transitions epsilon
+ * (epsilon-NFA)
+ * à partir d'un arbre syntaxique abstrait, suivant la construction d'Aho-Ullman
+ * (Chapitre 10).
  */
 public class NFA {
 
     private int stateCounter = 0;
 
     /**
-     * Point d'entrée pour convertir un arbre syntaxique en automate avec transitions epsilon.
+     * Point d'entrée pour convertir un arbre syntaxique en automate avec
+     * transitions epsilon.
      *
      * @param tree l'arbre syntaxique racine, non nul
      * @return un automate équivalent possédant un unique état initial (ENTER)
@@ -33,34 +34,40 @@ public class NFA {
 
     /**
      * Construction par récursion structurelle sur les noeuds de l'arbre.
-     * @param tree	l'arbre syntaxique racine, non nul.
-     * @return		l'automate NFA correspondant.
+     * 
+     * @param tree l'arbre syntaxique racine, non nul.
+     * @return l'automate NFA correspondant.
      */
     private Automaton build(SyntaxTree tree) {
         NodeType type = tree.getNodeType();
 
         switch (type) {
-            case LETTER:
+            case LETTER -> {
                 return buildLeaf(tree.getLetter().charAt(0));
+            }
 
-            case DOT:
+            case DOT -> {
                 return buildAnyLeaf();
+            }
 
-            case CONCATENATION:
+            case CONCATENATION -> {
                 return buildConcatenation(build(tree.getLeft()), build(tree.getRight()));
+            }
 
-            case ALTERNATION:
+            case ALTERNATION -> {
                 return buildAlternation(build(tree.getLeft()), build(tree.getRight()));
+            }
 
-            case STAR:
+            case STAR -> {
                 return buildStar(build(tree.getLeft()));
+            }
 
-            case PROTECTION:
+            case PROTECTION -> {
                 // Le noeud PROTECTION est une enveloppe transparente pour le sous-arbre gauche
                 return build(tree.getLeft());
+            }
 
-            default:
-                throw new IllegalArgumentException("Type de noeud non supporté pour la conversion : " + type);
+            default -> throw new IllegalArgumentException("Type de noeud non supporté pour la conversion : " + type);
         }
     }
 
@@ -70,8 +77,9 @@ public class NFA {
 
     /**
      * Crée l'automate pour un caractère littéral : (start) --'c'--> ((final))
-     * @param symbol	La lette à crée l'automate.
-     * @return			L'automate correspondant.
+     * 
+     * @param symbol La lette à crée l'automate.
+     * @return L'automate correspondant.
      */
     private Automaton buildLeaf(char symbol) {
         Automaton automaton = new Automaton();
@@ -100,10 +108,12 @@ public class NFA {
 
     /**
      * Concaténation de deux sous-automates A1 et A2 (Fig 10.28(b)):'
-     * On relie l'état final de A1 à l'état initial de A2 par une transition-epsilon.
-     * @param a1	un automate à concatener
-     * @param a2	un automate à concatener
-     * @return		l'automate final.
+     * On relie l'état final de A1 à l'état initial de A2 par une
+     * transition-epsilon.
+     * 
+     * @param a1 un automate à concatener
+     * @param a2 un automate à concatener
+     * @return l'automate final.
      */
     private Automaton buildConcatenation(Automaton a1, Automaton a2) {
         State accept1 = getUniqueFinalState(a1);
@@ -128,13 +138,14 @@ public class NFA {
      * Alternance (Union) de deux sous-automates A1 et A2 (Fig. 10.28(a)) :
      * Nouvel état initial avec transitions-epsilon vers les débuts de A1 et A2.
      * Transitions-epsilon depuis les fins de A1 et A2 vers le nouvel état final.
-     */
-    /**
+     * 
      * Concaténation de deux sous-automates A1 et A2 (Fig 10.28(b)):'
-     * On relie l'état final de A1 à l'état initial de A2 par une transition-epsilon.
-     * @param a1	un automate à alterner
-     * @param a2	un automate à alterner
-     * @return		l'automate final.
+     * On relie l'état final de A1 à l'état initial de A2 par une
+     * transition-epsilon.
+     * 
+     * @param a1 un automate à alterner
+     * @param a2 un automate à alterner
+     * @return l'automate final.
      */
     private Automaton buildAlternation(Automaton a1, Automaton a2) {
         State start1 = a1.getInitialState();
@@ -170,10 +181,12 @@ public class NFA {
 
     /**
      * Étoile de Kleene d'un sous-automate A1 (Fig. 10.28(c)) :
-     * Crée un nouveau début et une nouvelle fin reliés entre eux par epsilon (mot vide).
+     * Crée un nouveau début et une nouvelle fin reliés entre eux par epsilon (mot
+     * vide).
      * Ajoute une transition-epsilon arrière de la fin vers le début pour la boucle.
-     * @param a1	automate à mettre sous etoile.
-     * @return		l'automate sous etoile.
+     * 
+     * @param a1 automate à mettre sous etoile.
+     * @return l'automate sous etoile.
      */
     private Automaton buildStar(Automaton a1) {
         State oldStart = a1.getInitialState();
@@ -183,7 +196,7 @@ public class NFA {
         oldStart.setStatus(Status.INTERMEDIATE);
         oldAccept.setStatus(Status.INTERMEDIATE);
 
-        // creation des nouveaux états final/initial 
+        // creation des nouveaux états final/initial
         State newStart = createState(Status.ENTER);
         State newAccept = createState(Status.FINAL);
 
@@ -209,8 +222,9 @@ public class NFA {
 
     /**
      * Crée un nouvel état avec un label unique q0, q1, ...
-     * @param status	Le status de l'état (ENTER, FINAL, ...)
-     * @return			L'etat crée.
+     * 
+     * @param status Le status de l'état (ENTER, FINAL, ...)
+     * @return L'etat crée.
      */
     private State createState(Status status) {
         return new State("q" + (stateCounter++), status);
@@ -218,6 +232,7 @@ public class NFA {
 
     /**
      * Copie tous les états et toutes les transitions d'une source vers une cible.
+     * 
      * @param target
      * @param source
      */
@@ -231,14 +246,16 @@ public class NFA {
     }
 
     /**
-     * Récupère l'unique état final de l'automate construit selon le pattern inductif du livre.
-     * @param automaton		L'automate à recuperer l'état final.
-     * @return				L'etat final.
+     * Récupère l'unique état final de l'automate construit selon le pattern
+     * inductif du livre.
+     * 
+     * @param automaton L'automate à recuperer l'état final.
+     * @return L'etat final.
      */
     private State getUniqueFinalState(Automaton automaton) {
         Set<State> finalStates = automaton.getFinalStates();
         if (finalStates.size() != 1) {
-            throw new IllegalStateException("L'automate sous-jacent doit avoir exactement un état final, trouvé : " 
+            throw new IllegalStateException("L'automate sous-jacent doit avoir exactement un état final, trouvé : "
                     + finalStates.size());
         }
         return finalStates.iterator().next();
