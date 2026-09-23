@@ -9,7 +9,7 @@ import java.util.Optional;
 
 import com.sorbonne.automata.Automaton;
 import com.sorbonne.regex.DFA;
-import com.sorbonne.regex.DFAM;
+import com.sorbonne.regex.DFAMHopcroft;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
@@ -25,9 +25,9 @@ import com.sorbonne.utils.FileLoader;
  * Le motif est une expression régulière du langage de {@link RegexParser},
  * pas un filtre de noms de fichiers. En mode automatique, une concaténation
  * de lettres utilise KMP ; les autres expressions passent directement du NFA
- * au DFA de recherche. {@link DFAM#minimize(Automaton)} reste appelé sur ce
- * DFA, avant son indexation sans nouvelle déterminisation. La minimisation
- * reste une étape provisoire qui rend le même automate.
+ * au DFA de recherche. La stratégie DFA indexe directement ce graphe ; DFAM
+ * applique {@link DFAMHopcroft#minimize(Automaton)} avant la même indexation.
+ * AUTOMATON conserve le comportement historique avec minimisation.
  * </p>
  *
  * <p>
@@ -60,7 +60,11 @@ public final class Benchmark {
         /** Impose KMP ; refuse les expressions comportant un opérateur non littéral. */
         KMP,
         /** Impose les automates, y compris pour un motif littéral. */
-        AUTOMATON
+        AUTOMATON,
+        /** DFA de recherche sans minimisation. */
+        DFA,
+        /** DFA de recherche minimisé par Hopcroft. */
+        DFAM
     }
 
     /** Consommateur d'une ligne correspondante, avec son numéro dans le fichier. */
@@ -114,8 +118,7 @@ public final class Benchmark {
      * @param parsingNanos           analyse syntaxique
      * @param nfaNanos               construction du NFA, ou zéro avec KMP
      * @param dfaNanos               déterminisation, ou zéro avec KMP
-     * @param minimizationNanos      appel du placeholder DFAM, pas une véritable
-     *                               minimisation
+     * @param minimizationNanos      minimisation de Hopcroft du DFA de recherche
      * @param searchPreparationNanos table KMP ou préparation de la recherche par
      *                               automate
      * @param preparationNanos       préparation entière, incluant le choix du
@@ -208,14 +211,17 @@ public final class Benchmark {
             long nfaNanos, long dfaNanos, long minimizationNanos, long searchPreparationNanos) {
     }
 
-    /** Préparation commune aux modes comptage et affichage, exécutée une seule fois. */
+    /**
+     * Préparation commune aux modes comptage et affichage, exécutée une seule fois.
+     */
     private Preparation prepare() throws Exception {
         long start = System.nanoTime();
         SyntaxTree tree = RegexParser.parse(pattern);
         long parsingNanos = System.nanoTime() - start;
         Optional<String> literal = literalPattern(tree);
         Strategy selected = strategy == Strategy.AUTO
-                ? (literal.isPresent() ? Strategy.KMP : Strategy.AUTOMATON) : strategy;
+                ? (literal.isPresent() ? Strategy.KMP : Strategy.AUTOMATON)
+                : strategy;
         long nfaNanos = 0;
         long dfaNanos = 0;
         long minimizationNanos = 0;
@@ -239,8 +245,11 @@ public final class Benchmark {
             Automaton dfa = DFA.forSearch(nfa);
             dfaNanos = System.nanoTime() - phaseStart;
             phaseStart = System.nanoTime();
-            Automaton minimized = DFAM.minimize(dfa);
-            minimizationNanos = System.nanoTime() - phaseStart;
+            Automaton minimized = dfa;
+            if (selected != Strategy.DFA) {
+                minimized = DFAMHopcroft.minimize(dfa);
+                minimizationNanos = System.nanoTime() - phaseStart;
+            }
             phaseStart = System.nanoTime();
             search = NativeSearch.fromSearchDfa(minimized);
             searchPreparationNanos = System.nanoTime() - phaseStart;
