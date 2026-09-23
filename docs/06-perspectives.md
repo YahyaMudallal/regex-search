@@ -91,6 +91,6 @@ Le script exige un arbre Git propre, relance les tests, construit le JAR, puis a
 
 La chaîne implémentée sait préparer un motif et rechercher ses occurrences sans conserver tout le fichier en mémoire. Les tests donnent des éléments solides sur la préservation du langage et le comportement des deux moteurs dans le domaine couvert. Les statistiques publiées permettent de comparer les moteurs sur chaque motif et chaque périmètre mesuré.
 
-La minimisation reste nécessaire pour achever le périmètre annoncé. L’ajouter, puis réexécuter le même protocole, donnera une base de comparaison plus informative que de changer simultanément les motifs, les fichiers et la méthode de mesure.
+La minimisation est désormais intégrée au chemin `DFAM`. Les prochaines améliorations doivent donc viser les coûts réellement dominants — déterminisation, démarrage JVM et débit du scan — puis être évaluées en réexécutant exactement le même protocole, sans changer simultanément motifs, corpus et méthode de mesure.
 
 [← Expériences](05-experiences.md) · [Accueil](../README.md) · [Références →](references.md)

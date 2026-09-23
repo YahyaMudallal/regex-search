@@ -132,7 +132,7 @@ Elle comprend les index, les bitsets mémorisés en mots de 64 bits, le graphe p
 
 ## 5. Minimisation de Hopcroft sur DFA partiel et alphabet symbolique
 
-[`DFAMHopcroft.minimize`](../src/main/java/com/sorbonne/regex/DFAMHopcroft.java) construit un **nouvel automate minimal** et ne modifie jamais le DFA fourni. La définition suivie est celle du chapitre 10 du cours (§10.4, « Minimization of Automata ») : final/non-final forme la séparation de base, puis deux états sont distingués dès qu'un symbole mène vers deux classes déjà distinguées. Hopcroft calcule le point fixe de ce même critère par raffinement de partitions, en évitant le coût d'un examen naïf de toutes les paires. Les états inaccessibles sont retirés avant ce raffinement.
+[`DFAM.minimize`](../src/main/java/com/sorbonne/regex/DFAM.java) construit un **nouvel automate minimal** via l'implémentation de Hopcroft et ne modifie jamais le DFA fourni. La définition suivie est celle du chapitre 10 du cours (§10.4, « Minimization of Automata ») : final/non-final forme la séparation de base, puis deux états sont distingués dès qu'un symbole mène vers deux classes déjà distinguées. Hopcroft calcule le point fixe de ce même critère par raffinement de partitions, en évitant le coût d'un examen naïf de toutes les paires. Les états inaccessibles sont retirés avant ce raffinement.
 
 Le cours précise aussi qu'un automate déterministe partiel doit être complété par un **dead state** non final bouclant sur tous les symboles. Dans le projet, une transition absente signifie rejet ; l'index interne ajoute donc exactement cet **état puits implicite**. Ce puits participe aux classes d'équivalence mais n'est pas matérialisé dans le résultat lorsqu'il ne correspond à aucun état réel accessible. Cette technique conserve le langage tout en gardant un graphe final partiel.
 
@@ -175,7 +175,7 @@ Tous les sous-ensembles acceptants partagent un état terminal sans transitions.
 
 Si l’arbre accepte ε, `Benchmark` utilise directement un moteur toujours vrai. Il parcourt encore le fichier pour compter ou restituer les lignes et détecter les erreurs de décodage. La stratégie annoncée conserve DFA/DFAM si elle est imposée, ou AUTOMATON en sélection automatique pour un motif non littéral ; les phases NFA/DFA/DFAM non exécutées valent zéro.
 
-L’index contient des identifiants entiers, une classification globale des caractères et des pages de transitions avec destination par défaut. Seules les pages contenant des exceptions sont allouées. L’indexation reste bornée par $O(RK+T+X)$ au pire, mais n’alloue pas systématiquement une table dense $RK$. Le parcours fait des accès directs : $O(n)$ temps au pire et $O(1)$ mémoire supplémentaire hors index.
+L’index contient uniquement des identifiants entiers. Pour les automates usuels, `NativeSearch` matérialise une table plate `delta[state × classe]`; une transition ne demande alors ni `HashMap`, ni objet `State`, ni recherche d'arc. Une table ASCII directe `deltaAscii[state × 128]` est en plus préparée lorsque sa taille reste bornée : le scan de fichier évite ainsi même la classification UTF-16 sur les octets ASCII. Si une table dense deviendrait excessive, le moteur rebascule sur la représentation paginée avec destination par défaut. Le parcours reste $O(n)$ au pire et $O(1)$ mémoire supplémentaire hors index préparé.
 
 La déterminisation reste potentiellement exponentielle. Aucun budget d’états ni repli sur une simulation NFA n’est encore implémenté. `NativeSearch` ne délègue ni à `String.contains` ni à `Pattern`.
 
@@ -212,7 +212,7 @@ Le parseur et l’extraction du littéral sont eux aussi linéaires : la borne t
 | NFA | $O(m)$ temps moyen et mémoire | Graphe commun, aucune copie de fragment |
 | DFA | $O(N+E+X+RK(N+E))$ en moyenne | $R$ peut atteindre $2^N$ |
 | DFAM | $O(k n \log n)$ après indexation | Hopcroft ; DFA partiel complété par un puits implicite |
-| Préparation NativeSearch | Une déterminisation directe, puis indexation par pages | Explosion possible pendant la préparation |
+| Préparation NativeSearch | Une déterminisation directe, puis table dense/ASCII avec repli paginé | Explosion possible pendant la préparation |
 | Recherche NativeSearch préparée | $O(n)$ au pire | Coût et taille de l’index exclus de ce parcours |
 | Préparation KMP | $O(m)$ | Motif littéral uniquement |
 | Recherche KMP préparée | $O(n)$ | Préparation et parseur à ajouter au temps complet |

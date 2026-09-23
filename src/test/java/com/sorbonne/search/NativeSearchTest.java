@@ -180,4 +180,19 @@ class NativeSearchTest {
         assertTrue(prepared.search(repeated + "b"));
         assertFalse(prepared.search(repeated + "c"));
     }
+    /** Le chemin ASCII par blocs doit être strictement équivalent au parcours char par char. */
+    @Test
+    void asciiBulkCursorMatchesCharacterCursor() throws Exception {
+        NativeSearch.Prepared prepared = NativeSearch.prepareNfa(
+                NFA.buildNFA(RegexParser.parse("(Elizabeth|Darcy).*(said|replied)")));
+        byte[] text = "xx Elizabeth eventually said yy".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        SearchCursor bulk = prepared.newCursor();
+        SearchCursor scalar = prepared.newCursor();
+        assertTrue(bulk.acceptAscii(text, 0, text.length));
+        for (byte value : text) {
+            scalar.accept((char) (value & 0x7f));
+        }
+        assertEquals(scalar.matches(), bulk.matches());
+    }
+
 }

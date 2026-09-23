@@ -53,6 +53,8 @@ public class KMPSearch implements SearchAlgorithm<String> {
     public static final class Prepared implements PreparedSearch {
         /** Motif littéral dont les préfixes ont été calculés. */
         private final String pattern;
+        /** Copie ASCII du motif lorsqu'elle existe, pour le chemin fichier. */
+        private final byte[] asciiPattern;
         /** Table privée des préfixes réutilisables, jamais modifiée après construction. */
         private final int[] lps;
 
@@ -62,6 +64,7 @@ public class KMPSearch implements SearchAlgorithm<String> {
          */
         private Prepared(String pattern) {
             this.pattern = pattern;
+            this.asciiPattern = toAscii(pattern);
             this.lps = buildLPS(pattern);
         }
 
@@ -91,6 +94,18 @@ public class KMPSearch implements SearchAlgorithm<String> {
             return false;
         }
 
+        private static byte[] toAscii(String pattern) {
+            byte[] bytes = new byte[pattern.length()];
+            for (int i = 0; i < pattern.length(); i++) {
+                char symbol = pattern.charAt(i);
+                if (symbol > 0x7f) {
+                    return null;
+                }
+                bytes[i] = (byte) symbol;
+            }
+            return bytes;
+        }
+
         private int advance(int position, char symbol) {
             while (position > 0 && symbol != pattern.charAt(position)) {
                 position = lps[position - 1];
@@ -110,6 +125,48 @@ public class KMPSearch implements SearchAlgorithm<String> {
                         position = advance(position, symbol);
                     }
                     return matches();
+                }
+
+                @Override
+                public boolean acceptAscii(byte[] buffer, int offset, int length) {
+                    if (matches() || length == 0) {
+                        return matches();
+                    }
+                    int current = position;
+                    int end = offset + length;
+                    int patternLength = pattern.length();
+                    if (asciiPattern != null) {
+                        byte[] expected = asciiPattern;
+                        for (int i = offset; i < end; i++) {
+                            byte symbol = buffer[i];
+                            while (current > 0 && symbol != expected[current]) {
+                                current = lps[current - 1];
+                            }
+                            if (symbol == expected[current]) {
+                                current++;
+                                if (current == patternLength) {
+                                    position = current;
+                                    return true;
+                                }
+                            }
+                        }
+                    } else {
+                        for (int i = offset; i < end; i++) {
+                            char symbol = (char) (buffer[i] & 0x7f);
+                            while (current > 0 && symbol != pattern.charAt(current)) {
+                                current = lps[current - 1];
+                            }
+                            if (symbol == pattern.charAt(current)) {
+                                current++;
+                                if (current == patternLength) {
+                                    position = current;
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    position = current;
+                    return false;
                 }
 
                 @Override

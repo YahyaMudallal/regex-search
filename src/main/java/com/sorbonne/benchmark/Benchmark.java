@@ -9,7 +9,7 @@ import java.util.Optional;
 
 import com.sorbonne.automata.Automaton;
 import com.sorbonne.regex.DFA;
-import com.sorbonne.regex.DFAMHopcroft;
+import com.sorbonne.regex.DFAM;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
@@ -26,7 +26,7 @@ import com.sorbonne.utils.FileLoader;
  * pas un filtre de noms de fichiers. En mode automatique, une concaténation
  * de lettres utilise KMP ; les autres expressions passent directement du NFA
  * au DFA de recherche. La stratégie DFA indexe directement ce graphe ; DFAM
- * applique {@link DFAMHopcroft#minimize(Automaton)} avant la même indexation.
+ * applique {@link DFAM#minimize(Automaton)} avant la même indexation.
  * AUTOMATON conserve le comportement historique avec minimisation.
  * </p>
  *
@@ -247,7 +247,7 @@ public final class Benchmark {
             phaseStart = System.nanoTime();
             Automaton minimized = dfa;
             if (selected != Strategy.DFA) {
-                minimized = DFAMHopcroft.minimize(dfa);
+                minimized = DFAM.minimize(dfa);
                 minimizationNanos = System.nanoTime() - phaseStart;
             }
             phaseStart = System.nanoTime();

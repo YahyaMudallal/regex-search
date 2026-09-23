@@ -3,6 +3,7 @@ package com.sorbonne.search;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -49,10 +50,12 @@ public final class NativeSearch implements SearchAlgorithm<Automaton> {
      * ordinaire doit passer par prepare. Les futurs changements du graphe n'ont
      * aucun effet sur le moteur préparé.
      *
-     * <p>Les transitions utilisent des pages allouées à la demande et une
-     * destination par défaut : pas de tableau dense RK systématique. Le pire
-     * reste O(RK + T + X) temps/mémoire d'indexation, avec R états, K classes,
-     * T arcs et X exclusions. Le parcours fait des accès directs O(1).</p>
+     * <p>Le chemin chaud privilégie une table plate dense lorsque son empreinte
+     * reste bornée. Une transition devient alors deux accès de tableau et une
+     * multiplication entière. Pour les DFA exceptionnellement larges, une
+     * représentation paginée conserve une consommation mémoire raisonnable.
+     * La table de classes UTF-16 est directe (128 KiB) : aucun hachage ni double
+     * indirection n'est effectué pendant le scan.</p>
      */
     public static Prepared fromSearchDfa(Automaton searchable) {
         return new Prepared(Objects.requireNonNull(searchable, "Le DFA ne doit pas être nul"));
@@ -68,7 +71,7 @@ public final class NativeSearch implements SearchAlgorithm<Automaton> {
         if (dfa.getInitialState() == null) {
             throw new IllegalArgumentException("Le DFA doit posséder un état initial");
         }
-        Map<State, Row> rows = new HashMap<>();
+        Map<State, Row> rows = new IdentityHashMap<>();
         for (Transition transition : dfa.getTransitions()) {
             if (transition.isEpsilon()) {
                 throw new IllegalArgumentException("Un DFA ne peut pas contenir de transition ε");
@@ -97,28 +100,42 @@ public final class NativeSearch implements SearchAlgorithm<Automaton> {
 
     /** Tables privées immuables ; aucun objet State n'est conservé après indexation. */
     public static final class Prepared implements PreparedSearch {
+        /** État sentinelle : aucune continuation possible. */
+        private static final int DEAD = -1;
+        /** État sentinelle : une occurrence a déjà été trouvée. */
+        private static final int MATCH = -2;
+        /** Au-delà de 8 Mio de cellules (environ 32 Mio d’octets), bascule vers la table paginée. */
+        private static final long MAX_DENSE_CELLS = 8L * 1024 * 1024;
+        /** Même budget maximal pour la table ASCII spécialisée. */
+        private static final long MAX_ASCII_CELLS = 8L * 1024 * 1024;
+
         private final int start;
-        private final boolean[] finals;
-        private final int[][][] transitions;
-        private final int[] defaults;
         private final int classCount;
-        // Deux niveaux évitent 65 536 cases pour les petits alphabets.
-        // La classe 0 représente tous les caractères absents de l'alphabet explicite.
-        private final int[][] classes = new int[256][];
+        /** Classe de chaque unité UTF-16, accès direct sans branche. */
+        private final char[] classes = new char[Character.MAX_VALUE + 1];
+        /** Table état-major : delta[state * classCount + class]. */
+        private final int[] denseTransitions;
+        /** Table directe pour les octets ASCII du chemin fichier. */
+        private final int[] asciiTransitions;
+        /** Repli mémoire pour les automates dont la table dense serait excessive. */
+        private final int[][][] sparseTransitions;
+        private final int[] defaults;
 
         private Prepared(Automaton dfa) {
             Map<State, Row> rows = validate(dfa);
-            Map<State, Integer> ids = new HashMap<>();
-            finals = new boolean[dfa.getStates().size()];
-            transitions = new int[finals.length][][];
-            defaults = new int[finals.length];
-            Arrays.fill(defaults, -1);
+            Map<State, Integer> ids = new IdentityHashMap<>(Math.max(16, dfa.getStates().size() * 2));
+            boolean[] finals = new boolean[dfa.getStates().size()];
             for (State state : dfa.getStates()) {
                 int id = ids.size();
                 ids.put(state, id);
                 finals[id] = state.getStatus().isFinal();
             }
-            start = ids.get(dfa.getInitialState());
+            Integer startId = ids.get(dfa.getInitialState());
+            if (startId == null) {
+                throw new IllegalArgumentException("L'état initial n'appartient pas au DFA");
+            }
+            start = finals[startId] ? MATCH : startId;
+
             Set<Character> alphabet = new LinkedHashSet<>();
             for (Row row : rows.values()) {
                 alphabet.addAll(row.characters.keySet());
@@ -127,17 +144,82 @@ public final class NativeSearch implements SearchAlgorithm<Automaton> {
                 }
             }
             List<Character> symbols = new ArrayList<>(alphabet);
-            classCount = symbols.size() + 1;
-            for (int i = 0; i < symbols.size(); i++) {
-                char symbol = symbols.get(i);
-                if (classes[symbol >>> 8] == null) {
-                    classes[symbol >>> 8] = new int[256];
-                }
-                classes[symbol >>> 8][symbol & 255] = i + 1;
+            boolean hasOtherClass = symbols.size() < Character.MAX_VALUE + 1;
+            classCount = symbols.size() + (hasOtherClass ? 1 : 0);
+            int nextClass = hasOtherClass ? 1 : 0;
+            for (char symbol : symbols) {
+                classes[symbol] = (char) nextClass++;
             }
+
+            long cells = (long) finals.length * classCount;
+            if (cells <= MAX_DENSE_CELLS && cells <= Integer.MAX_VALUE) {
+                denseTransitions = new int[(int) cells];
+                Arrays.fill(denseTransitions, DEAD);
+                sparseTransitions = null;
+                defaults = null;
+                buildDense(rows, ids, finals);
+                asciiTransitions = (long) finals.length * 128 <= MAX_ASCII_CELLS
+                        ? buildAsciiTransitions(finals.length)
+                        : null;
+            } else {
+                denseTransitions = null;
+                asciiTransitions = null;
+                sparseTransitions = new int[finals.length][][];
+                defaults = new int[finals.length];
+                Arrays.fill(defaults, DEAD);
+                buildSparse(rows, ids, finals);
+            }
+        }
+
+        private int encodedDestination(Map<State, Integer> ids, boolean[] finals, State destination) {
+            Integer id = ids.get(destination);
+            if (id == null) {
+                throw new IllegalArgumentException("Une transition référence un état absent du DFA");
+            }
+            return finals[id] ? MATCH : id;
+        }
+
+        private void buildDense(Map<State, Row> rows, Map<State, Integer> ids, boolean[] finals) {
             for (Map.Entry<State, Integer> entry : ids.entrySet()) {
-                int id = entry.getValue();
-                if (finals[id]) {
+                int state = entry.getValue();
+                if (finals[state]) {
+                    continue;
+                }
+                Row row = rows.get(entry.getKey());
+                if (row == null) {
+                    continue;
+                }
+                int base = state * classCount;
+                if (row.other != null) {
+                    int destination = encodedDestination(ids, finals, row.other.getDestination());
+                    Arrays.fill(denseTransitions, base, base + classCount, destination);
+                    for (char excluded : row.other.getExcludedSymbols()) {
+                        denseTransitions[base + classOf(excluded)] = DEAD;
+                    }
+                }
+                for (Map.Entry<Character, State> arc : row.characters.entrySet()) {
+                    denseTransitions[base + classOf(arc.getKey())] =
+                            encodedDestination(ids, finals, arc.getValue());
+                }
+            }
+        }
+
+        private int[] buildAsciiTransitions(int stateCount) {
+            int[] result = new int[stateCount << 7];
+            for (int state = 0; state < stateCount; state++) {
+                int sourceBase = state * classCount;
+                int targetBase = state << 7;
+                for (int symbol = 0; symbol < 128; symbol++) {
+                    result[targetBase + symbol] = denseTransitions[sourceBase + classes[symbol]];
+                }
+            }
+            return result;
+        }
+
+        private void buildSparse(Map<State, Row> rows, Map<State, Integer> ids, boolean[] finals) {
+            for (Map.Entry<State, Integer> entry : ids.entrySet()) {
+                int state = entry.getValue();
+                if (finals[state]) {
                     continue;
                 }
                 Row row = rows.get(entry.getKey());
@@ -145,39 +227,39 @@ public final class NativeSearch implements SearchAlgorithm<Automaton> {
                     continue;
                 }
                 if (row.other != null) {
-                    defaults[id] = ids.get(row.other.getDestination());
+                    defaults[state] = encodedDestination(ids, finals, row.other.getDestination());
                     for (char excluded : row.other.getExcludedSymbols()) {
-                        set(id, classOf(excluded), -1);
+                        setSparse(state, classOf(excluded), DEAD);
                     }
                 }
                 for (Map.Entry<Character, State> arc : row.characters.entrySet()) {
-                    set(id, classOf(arc.getKey()), ids.get(arc.getValue()));
+                    setSparse(state, classOf(arc.getKey()), encodedDestination(ids, finals, arc.getValue()));
                 }
             }
         }
 
         private int classOf(char symbol) {
-            int[] page = classes[symbol >>> 8];
-            return page == null ? 0 : page[symbol & 255];
+            return classes[symbol];
         }
 
         /** Alloue uniquement les pages contenant une exception à la transition par défaut. */
-        private void set(int state, int symbolClass, int destination) {
-            int[][] pages = transitions[state];
+        private void setSparse(int state, int symbolClass, int destination) {
+            int[][] pages = sparseTransitions[state];
             int pageIndex = symbolClass >>> 8;
             if (pages == null) {
                 if (destination == defaults[state]) {
                     return;
                 }
                 pages = new int[(classCount + 255) >>> 8][];
-                transitions[state] = pages;
+                sparseTransitions[state] = pages;
             }
             int[] page = pages[pageIndex];
             if (page == null) {
                 if (destination == defaults[state]) {
                     return;
                 }
-                page = new int[Math.min(256, classCount)];
+                int pageLength = Math.min(256, classCount - (pageIndex << 8));
+                page = new int[pageLength];
                 Arrays.fill(page, defaults[state]);
                 pages[pageIndex] = page;
             }
@@ -185,8 +267,14 @@ public final class NativeSearch implements SearchAlgorithm<Automaton> {
         }
 
         private int next(int state, char symbol) {
-            int symbolClass = classOf(symbol);
-            int[][] pages = transitions[state];
+            if (state < 0) {
+                return state;
+            }
+            int symbolClass = classes[symbol];
+            if (denseTransitions != null) {
+                return denseTransitions[state * classCount + symbolClass];
+            }
+            int[][] pages = sparseTransitions[state];
             if (pages == null) {
                 return defaults[state];
             }
@@ -198,16 +286,31 @@ public final class NativeSearch implements SearchAlgorithm<Automaton> {
         public boolean search(String text) {
             Objects.requireNonNull(text, "Le texte ne doit pas être nul");
             int current = start;
-            if (finals[current]) {
+            if (current == MATCH) {
                 return true;
             }
-            for (int i = 0; i < text.length(); i++) {
-                current = next(current, text.charAt(i));
-                if (current < 0) {
-                    return false;
+            if (denseTransitions != null) {
+                int[] table = denseTransitions;
+                char[] charClasses = classes;
+                int width = classCount;
+                for (int i = 0, length = text.length(); i < length; i++) {
+                    current = table[current * width + charClasses[text.charAt(i)]];
+                    if (current == MATCH) {
+                        return true;
+                    }
+                    if (current == DEAD) {
+                        return false;
+                    }
                 }
-                if (finals[current]) {
+                return false;
+            }
+            for (int i = 0, length = text.length(); i < length; i++) {
+                current = next(current, text.charAt(i));
+                if (current == MATCH) {
                     return true;
+                }
+                if (current == DEAD) {
+                    return false;
                 }
             }
             return false;
@@ -215,27 +318,79 @@ public final class NativeSearch implements SearchAlgorithm<Automaton> {
 
         @Override
         public SearchCursor newCursor() {
-            return new SearchCursor() {
-                private int current = start;
+            return new Cursor(this);
+        }
 
-                @Override
-                public boolean accept(char symbol) {
-                    if (current >= 0 && !finals[current]) {
-                        current = next(current, symbol);
+        /** Curseur concret : facilite l'inlining du chemin chaud par HotSpot. */
+        private static final class Cursor implements SearchCursor {
+            private final Prepared owner;
+            private int current;
+
+            private Cursor(Prepared owner) {
+                this.owner = owner;
+                current = owner.start;
+            }
+
+            @Override
+            public boolean accept(char symbol) {
+                if (current >= 0) {
+                    current = owner.next(current, symbol);
+                }
+                return current == MATCH;
+            }
+
+            @Override
+            public boolean acceptAscii(byte[] buffer, int offset, int length) {
+                if (current == MATCH || current == DEAD || length == 0) {
+                    return current == MATCH;
+                }
+                int end = offset + length;
+                if (owner.asciiTransitions != null) {
+                    int state = current;
+                    int[] table = owner.asciiTransitions;
+                    for (int i = offset; i < end; i++) {
+                        state = table[(state << 7) + (buffer[i] & 0x7f)];
+                        if (state < 0) {
+                            current = state;
+                            return state == MATCH;
+                        }
                     }
-                    return matches();
+                    current = state;
+                    return false;
                 }
+                if (owner.denseTransitions != null) {
+                    int state = current;
+                    int[] table = owner.denseTransitions;
+                    char[] charClasses = owner.classes;
+                    int width = owner.classCount;
+                    for (int i = offset; i < end; i++) {
+                        state = table[state * width + charClasses[buffer[i] & 0x7f]];
+                        if (state < 0) {
+                            current = state;
+                            return state == MATCH;
+                        }
+                    }
+                    current = state;
+                    return false;
+                }
+                for (int i = offset; i < end; i++) {
+                    current = owner.next(current, (char) (buffer[i] & 0x7f));
+                    if (current < 0) {
+                        return current == MATCH;
+                    }
+                }
+                return false;
+            }
 
-                @Override
-                public boolean matches() {
-                    return current >= 0 && finals[current];
-                }
+            @Override
+            public boolean matches() {
+                return current == MATCH;
+            }
 
-                @Override
-                public void reset() {
-                    current = start;
-                }
-            };
+            @Override
+            public void reset() {
+                current = owner.start;
+            }
         }
     }
 }

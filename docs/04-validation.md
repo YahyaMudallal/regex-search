@@ -78,6 +78,7 @@ Les tests de `Benchmark` écrivent de vrais fichiers dans des répertoires tempo
 - les séparateurs LF, CRLF et CR, ainsi qu’une dernière ligne sans séparateur ;
 - une ligne dépassant le tampon de 64 K caractères, avec un motif multioctet près de sa limite ;
 - un fichier absent, un répertoire donné à la place d’un fichier et des octets UTF-8 invalides ;
+- le fast path `byte[]` du comptage, y compris emoji/UTF-8 multioctet à cheval sur 64 Kio et CRLF aux frontières ;
 - deux appels successifs au même benchmark, dont les compteurs doivent repartir de zéro.
 
 Les durées sont vérifiées par leurs relations : valeurs non négatives, étapes non utilisées à zéro et total égal à préparation plus parcours. Aucun test ne suppose qu’une recherche doit finir en moins d’un nombre arbitraire de millisecondes. Les performances appartiennent au protocole expérimental, pas à une assertion sensible à la charge de la machine.
@@ -92,7 +93,7 @@ Trois tests Java de `Main` protègent le mode `--count` : sortie numérique seul
 
 ## 6. État vérifié du code optimisé
 
-Les 458 tests de `DFAMHopcroftTest` vérifient les exemples et propriétés de minimisation, dont la conservation du langage et du comportement de recherche. Les tests du benchmark couvrent les chemins DFA sans minimisation, DFAM et le raccourci nullable. Les tests Python refusent aussi de comparer des moteurs sur des entrées différentes.
+Les tests de `DFAMHopcroftTest` vérifient les exemples et propriétés de minimisation, dont la conservation du langage et du comportement de recherche. Les tests du benchmark couvrent les chemins DFA sans minimisation, DFAM et le raccourci nullable. Les tests Python refusent aussi de comparer des moteurs sur des entrées différentes.
 
 La campagne fixe exécute les tests avant toute mesure : **4 140 tests Java et 24 tests Python**. Le journal est conservé localement dans `target/report/results/validation.txt`. Les tests Python supplémentaires protègent l'équilibrage des moteurs, le calcul par fork, les contrôles d'intégrité, le refus des observations dupliquées, la restauration après une publication interrompue et la conservation des assets lors du nettoyage.
 
@@ -108,6 +109,6 @@ Les oracles ne sont pas tous entièrement indépendants : le simulateur NFA part
 
 L’égalité des comptes avec grep ne garantit pas, à elle seule, que les mêmes lignes ont été sélectionnées : deux ensembles différents peuvent avoir le même cardinal. Le mode retournant les numéros et contenus des lignes est maintenant comparé à un oracle sur les fichiers générés, hors chronométrage.
 
-Les tests de `DFAM` couvrent maintenant la conservation du langage avant/après minimisation, la fusion d'états indiscernables, la suppression des états inaccessibles, les transitions partielles via un puits implicite, les classes `ANY`, l'idempotence du nombre d'états et le comportement du DFA spécialisé de recherche. Deux property tests génèrent des centaines de regex et des milliers de mots/textes reproductibles.
+Les tests de `DFAM` et de son implémentation Hopcroft couvrent maintenant la conservation du langage avant/après minimisation, la fusion d'états indiscernables, la suppression des états inaccessibles, les transitions partielles via un puits implicite, les classes `ANY`, l'idempotence du nombre d'états et le comportement du DFA spécialisé de recherche. Deux property tests génèrent des centaines de regex et des milliers de mots/textes reproductibles.
 
 [← Algorithmes](03-algorithmes.md) · [Accueil](../README.md) · [Expériences →](05-experiences.md)

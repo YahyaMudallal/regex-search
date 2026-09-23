@@ -10,7 +10,7 @@ import com.sorbonne.automata.Status;
 import com.sorbonne.automata.Transition;
 import com.sorbonne.benchmark.Benchmark;
 import com.sorbonne.regex.DFA;
-import com.sorbonne.regex.DFAMHopcroft;
+import com.sorbonne.regex.DFAM;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
@@ -203,7 +203,7 @@ public class Main {
         SyntaxTree tree = RegexParser.parse(expression);
         Automaton nfa = NFA.buildNFA(tree);
         Automaton dfa = DFA.convert(nfa);
-        Automaton minimized = DFAMHopcroft.minimize(dfa);
+        Automaton minimized = DFAM.minimize(dfa);
         System.out.println("Expression : " + expression);
         System.out.println("Arbre : " + tree);
         System.out.println("NFA :\n" + nfa);

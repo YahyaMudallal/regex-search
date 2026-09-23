@@ -110,7 +110,7 @@ flowchart LR
     M --> S["Indexation des transitions"]
     K --> L["Recherche sur chaque ligne"]
     S --> L
-    F["Fichier UTF-8 · lecture bufferisée"] --> L
+    F["Fichier UTF-8 · scan strict par blocs"] --> L
     L --> O["Lignes affichées ou compteurs + durées"]
     style M fill:#fff3d6,stroke:#ba7b13,color:#5b3c0a
     style L fill:#e3f4ef,stroke:#16866b,color:#124a3b
@@ -182,7 +182,7 @@ regex-search/
     │   ├── regex/                    # parseur, arbres, NFA, DFA et DFAM
     │   ├── search/                   # KMP et recherche par automate
     │   ├── benchmark/                # préparation, parcours et chronométrage
-    │   ├── utils/                    # ouverture UTF-8 bufferisée
+    │   ├── utils/                    # scan UTF-8 strict + fast path ASCII
     │   └── specifications/           # sujet et chapitre de référence
     └── test/java/com/sorbonne/       # exemples, propriétés et générateurs
 ```

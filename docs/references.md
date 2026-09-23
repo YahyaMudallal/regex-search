@@ -51,7 +51,7 @@ Les autres textes du répertoire `Samples/` constituent des instances disponible
 | Versions de compilation et de test | [pom.xml](../pom.xml) |
 | Construction NFA | [NFA.java](../src/main/java/com/sorbonne/regex/NFA.java) |
 | Sous-ensembles et classes de caractères | [DFA.java](../src/main/java/com/sorbonne/regex/DFA.java) |
-| Minimisation de Hopcroft | [DFAMHopcroft.java](../src/main/java/com/sorbonne/regex/DFAMHopcroft.java) |
+| Minimisation de Hopcroft | [DFAM.java](../src/main/java/com/sorbonne/regex/DFAM.java) / [DFAMHopcroft.java](../src/main/java/com/sorbonne/regex/DFAMHopcroft.java) |
 | Recherche de facteur par automate | [NativeSearch.java](../src/main/java/com/sorbonne/search/NativeSearch.java) |
 | Préparation et parcours KMP | [KMPSearch.java](../src/main/java/com/sorbonne/search/KMPSearch.java) |
 | Frontières du chronométrage Java | [Benchmark.java](../src/main/java/com/sorbonne/benchmark/Benchmark.java) |

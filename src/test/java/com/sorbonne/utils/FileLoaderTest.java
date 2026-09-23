@@ -9,6 +9,10 @@ import com.sorbonne.search.SearchCursor;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
+import java.nio.charset.MalformedInputException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Random;
 import java.util.regex.Pattern;
@@ -110,4 +114,61 @@ class FileLoaderTest {
             assertFalse(left.accept('c'));
         }
     }
+    @Test
+    void pathFastUtf8ScannerMatchesBufferedReaderIncludingBufferBoundaries() throws Exception {
+        String text = "x".repeat(65_535) + "😀ab\r\n"
+                + "préfixe 東京 suffixe\n"
+                + "a😀b\r"
+                + "ab";
+        Path file = Files.createTempFile("regex-search-fast-utf8", ".txt");
+        try {
+            Files.writeString(file, text, StandardCharsets.UTF_8);
+            for (String regex : List.of("ab", "a.b", "a..b", "😀", "東京", "é", ".*ab")) {
+                PreparedSearch search = NativeSearch.prepareNfa(NFA.buildNFA(RegexParser.parse(regex)));
+                FileLoader.Counts expected;
+                try (BufferedReader reader = FileLoader.open(file)) {
+                    long lines = 0;
+                    long matches = 0;
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        lines++;
+                        if (search.search(line)) {
+                            matches++;
+                        }
+                    }
+                    expected = new FileLoader.Counts(lines, matches);
+                }
+                assertEquals(expected, FileLoader.count(file, search.newCursor()), regex);
+            }
+        } finally {
+            Files.deleteIfExists(file);
+        }
+    }
+
+    @Test
+    void pathFastUtf8ScannerRejectsMalformedSequencesEvenAfterAMatch() throws Exception {
+        byte[][] invalid = {
+                {(byte) 0x80},
+                {(byte) 0xc0, (byte) 0x80},
+                {(byte) 0xe0, (byte) 0x80, (byte) 0x80},
+                {(byte) 0xed, (byte) 0xa0, (byte) 0x80},
+                {(byte) 0xf4, (byte) 0x90, (byte) 0x80, (byte) 0x80},
+                {(byte) 0xf0, (byte) 0x9f}
+        };
+        for (int i = 0; i < invalid.length; i++) {
+            Path file = Files.createTempFile("regex-search-invalid-utf8-" + i, ".txt");
+            try {
+                byte[] prefix = "a\n".getBytes(StandardCharsets.UTF_8);
+                byte[] content = new byte[prefix.length + invalid[i].length];
+                System.arraycopy(prefix, 0, content, 0, prefix.length);
+                System.arraycopy(invalid[i], 0, content, prefix.length, invalid[i].length);
+                Files.write(file, content);
+                assertThrows(MalformedInputException.class,
+                        () -> FileLoader.count(file, KMPSearch.prepare("a").newCursor()), "cas=" + i);
+            } finally {
+                Files.deleteIfExists(file);
+            }
+        }
+    }
+
 }

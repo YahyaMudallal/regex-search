@@ -129,11 +129,9 @@ La table LPS de KMP n’est pas reconstruite entre ces deux appels. `NativeSearc
 
 ## 5. Entrées-sorties et mémoire
 
-`FileLoader.open` ouvre un fichier ordinaire avec un décodeur UTF-8 strict et un `BufferedReader` de **65 536 caractères**. Un encodage invalide déclenche une erreur ; il n’est pas remplacé silencieusement par un caractère de substitution qui pourrait changer le résultat de la recherche.
+Deux chemins d’entrée-sortie coexistent volontairement. `FileLoader.open` fournit le chemin lisible du mode `--print` : décodeur UTF-8 strict et `BufferedReader` de **65 536 caractères**. Le comptage, qui constitue le chemin mesuré, utilise directement un tampon de **65 536 octets** et un décodeur UTF-8 strict intégré au scan. Les plages ASCII sont transmises au moteur sans matérialiser un `char[]`; seules les séquences multioctets sont converties en unités UTF-16. Un encodage invalide déclenche toujours une erreur, y compris après qu'une correspondance a déjà été trouvée.
 
-Le tampon réduit le nombre de petits accès au lecteur sous-jacent. Sa taille est un compromis de mise en œuvre, **pas une valeur démontrée optimale** : aucune campagne ne compare ici plusieurs tailles de tampon.
-
-Le comptage utilise `FileLoader.count` : lecture par blocs et conservation du seul état du moteur, sans allocation d’une chaîne par ligne. Sa mémoire de parcours dépend du tampon, même pour une ligne de plusieurs centaines de mégaoctets. Le mode d’affichage utilise encore `readLine()` pour restituer la ligne complète.
+La taille du tampon reste un compromis de mise en œuvre, **pas une valeur démontrée optimale**. Le comptage conserve seulement le tampon et l’état du moteur, sans allocation d’une chaîne par ligne ; sa mémoire de parcours est donc indépendante de la longueur d’une ligne. Le mode d’affichage utilise encore `readLine()` car il doit restituer la ligne complète.
 
 Les séparateurs LF, CRLF et CR sont reconnus, même lorsqu’un CRLF traverse deux blocs. Une dernière ligne sans séparateur final est traitée. Une fin de fichier immédiatement après un LF ne crée pas de ligne vide supplémentaire.
 
@@ -149,4 +147,4 @@ En cas d’erreur, le pipeline ne rend pas un compte partiel présenté comme un
 
 ## Stratégies mesurées séparément
 
-`DFA` et `DFAM` construisent le même NFA puis le même DFA de recherche. `DFA` l’indexe immédiatement ; `DFAM` appelle `DFAMHopcroft.minimize` avant la même indexation. `KMP` exige un littéral. `AUTO` sélectionne KMP pour les littéraux, sinon le chemin `AUTOMATON`, conservé comme alias avec minimisation. Un motif nullable utilise le raccourci commun, sans construction ni minimisation.
+`DFA` et `DFAM` construisent le même NFA puis le même DFA de recherche. `DFA` l’indexe immédiatement ; `DFAM` appelle le point d’entrée public `DFAM.minimize`, qui délègue à Hopcroft, avant la même indexation. `KMP` exige un littéral. `AUTO` sélectionne KMP pour les littéraux, sinon le chemin `AUTOMATON`, conservé comme alias avec minimisation. Un motif nullable utilise le raccourci commun, sans construction ni minimisation.
