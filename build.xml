@@ -8,7 +8,7 @@
     </target>
     <target name="compile">
         <mkdir dir="${classes.dir}"/>
-        <javac srcdir="${src.dir}" destdir="${classes.dir}" source="25" target="25" encoding="UTF-8"
+        <javac srcdir="${src.dir}" destdir="${classes.dir}" release="21" encoding="UTF-8"
                includeantruntime="false"/>
     </target>
     <target name="jar" depends="compile">
