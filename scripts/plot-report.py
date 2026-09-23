@@ -1,131 +1,163 @@
 #!/usr/bin/env python3
-"""Trace les résultats d'une campagne réelle, sans relancer ni modifier les mesures.
-
-Usage : python scripts/plot-report.py docs/results/2026-09-22 --output docs/assets
-Dépendance optionnelle : scripts/requirements-report.txt.
-"""
-
+"""Compare DFA, DFAM, KMP (littéraux seulement) et GNU grep depuis les CSV validés."""
 import argparse
-import csv
 import json
+import os
 from pathlib import Path
+import statistics
+import sys
+import textwrap
 
+ROOT = Path(__file__).resolve().parents[1]
+os.environ.setdefault('MPLCONFIGDIR', str(ROOT / '.cache/matplotlib'))
+os.environ.setdefault('XDG_CACHE_HOME', str(ROOT / '.cache'))
+sys.path.insert(0, str(ROOT / 'scripts/lib'))
+from fixed_report import load_validated_results
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-NAVY = "#233b63"
-TEAL = "#137e72"
-ORANGE = "#bc6b22"
-INK = "#233249"
+COLORS = {'KMP': '#233b63', 'DFA': '#bc6b22', 'DFAM': '#8654a3', 'grep': '#137e72'}
+NAMES = {'KMP': 'KMP', 'DFA': 'DFA', 'DFAM': 'DFAM · Hopcroft', 'grep': 'GNU grep -E (egrep)'}
 
 
 def main():
-    """Lit les CSV publiés et produit trois figures SVG et PNG avec leurs unités."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("campaign", type=Path)
-    parser.add_argument("--output", type=Path, default=Path("docs/assets"))
+    parser.add_argument('campaign', type=Path, nargs='?', default=ROOT/'target/report/results')
+    parser.add_argument('--output', type=Path, default=ROOT/'target/report/figures')
     args = parser.parse_args()
-    manifest = json.loads((args.campaign / "campaign.json").read_text())
-    experiments = manifest["experiments"]
-    summaries, runs = {}, {}
-    for case in experiments:
-        location = args.campaign / case["id"]
-        with (location / "summary.csv").open() as stream:
-            summaries[case["id"]] = {row["engine"]: row for row in csv.DictReader(stream)}
-        with (location / "runs.csv").open() as stream:
-            runs[case["id"]] = list(csv.DictReader(stream))
+    if args.output.resolve().is_relative_to((ROOT/'docs/assets').resolve()):
+        parser.error('Tracer localement puis publier avec freeze-report.sh ou report-campaign.sh.')
+    manifest, cli, jvm, cli_summaries, jvm_summaries = load_validated_results(args.campaign)
+    profile = manifest['profile']
+    groups = {}
+    for case in profile['experiments']:
+        groups.setdefault(case['comparison'], {})[case['strategy']] = case
+    cs = {(r['case_id'],r['engine']):r for r in cli_summaries}
+    js = {(r['case_id'],r['metric']):r for r in jvm_summaries}
     args.output.mkdir(parents=True, exist_ok=True)
-    plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 11,
-                         "text.color": INK, "axes.labelcolor": INK,
-                         "axes.spines.top": False, "axes.spines.right": False,
-                         "axes.edgecolor": "#bdc7d2", "axes.titleweight": "bold",
-                         "figure.facecolor": "#ffffff", "axes.facecolor": "#ffffff",
-                         "svg.hashsalt": "regex-search-report-2026"})
+    plt.rcParams.update({'font.family':'DejaVu Sans', 'font.size':10, 'text.color':'#233249',
+        'axes.spines.top':False, 'axes.spines.right':False, 'axes.edgecolor':'#bdc7d2',
+        'figure.facecolor':'white', 'axes.facecolor':'white', 'svg.hashsalt':profile['protocol'],
+        'svg.fonttype':'none', 'text.parse_math':False})
+    note = f"{profile['protocol']} · {manifest['finished_utc'][:10]} · profil {manifest['profile_sha256'][:10]}"
 
-    def save(figure, name, title):
-        """Conserve une version vectorielle et une version raster pour inspection/export."""
-        figure.savefig(args.output / f"{name}.svg", bbox_inches="tight",
-                       metadata={"Title": title, "Date": manifest["started_utc"]})
-        figure.savefig(args.output / f"{name}.png", bbox_inches="tight", dpi=170)
-        plt.close(figure)
+    def case(key):
+        return groups[key]['DFA']
 
-    # Une même échelle part de zéro pour les deux commandes ; les erreurs sont des écarts types.
-    cases = experiments[:6]
-    figure, axis = plt.subplots(figsize=(11.4, 5.8))
-    positions = np.arange(len(cases))
-    for engine, shift, color, label in [("java", -0.18, NAVY, "Java"), ("grep", 0.18, TEAL, "GNU grep -E")]:
-        means = [float(summaries[case["id"]][engine]["mean_ms"]) for case in cases]
-        deviations = [float(summaries[case["id"]][engine]["sample_stdev_ms"]) for case in cases]
-        bars = axis.barh(positions + shift, means, height=0.31, xerr=deviations,
-                         color=color, label=label, capsize=3, error_kw={"ecolor": INK, "elinewidth": 1})
-        for bar, mean, deviation in zip(bars, means, deviations):
-            axis.text(mean + deviation + 1.8, bar.get_y() + bar.get_height() / 2,
-                      f"{mean:.1f}", va="center", fontsize=9)
-    axis.set_yticks(positions, [case["label"] for case in cases])
-    axis.invert_yaxis()
-    axis.set_xlabel("Temps complet du processus (ms) · moyenne ± un écart type")
-    axis.set_xlim(left=0, right=axis.get_xlim()[1] * 1.14)
-    axis.grid(axis="x", alpha=0.18)
-    axis.set_axisbelow(True)
-    axis.legend(loc="lower right", frameon=False)
-    figure.suptitle("Un même livre, plusieurs chemins de recherche", x=0.26, ha="left", fontsize=17, weight="bold")
-    axis.set_title(f"Pride and Prejudice · {manifest['runs_per_engine']} mesures par moteur · JVM comprise · DFAM provisoire",
-                   loc="left", fontsize=10, weight="normal", pad=15)
-    figure.tight_layout()
-    save(figure, "latency", "Temps complets des commandes selon le motif")
+    def label(key):
+        return '\n'.join(textwrap.wrap(case(key)['regex'], width=48, break_on_hyphens=False))
 
-    # Les points ×1, ×8 et ×32 ne changent pas la distribution des lignes du livre.
-    figure, axis = plt.subplots(figsize=(10.6, 5.8))
-    series = [("KMP (AUTO)", NAVY, "java", ["literal-auto", "scale-auto-8", "scale-auto-32"]),
-              ("Automate imposé", ORANGE, "java", ["literal-automaton", "scale-automaton-8", "scale-automaton-32"]),
-              ("GNU grep (campagne KMP)", TEAL, "grep", ["literal-auto", "scale-auto-8", "scale-auto-32"])]
-    for label, color, engine, identifiers in series:
-        sizes = []
-        for identifier in identifiers:
-            meta = json.loads((args.campaign / identifier / "metadata.json").read_text())
-            sizes.append(meta["corpus"]["bytes"] / (1024 * 1024))
-        means = [float(summaries[identifier][engine]["mean_ms"]) for identifier in identifiers]
-        deviations = [float(summaries[identifier][engine]["sample_stdev_ms"]) for identifier in identifiers]
-        axis.errorbar(sizes, means, yerr=deviations, fmt="o-", color=color, label=label,
-                      linewidth=2, capsize=4, markersize=6)
-    axis.set_xlabel("Taille du corpus normalisé (Mio) · livre répété 1, 8 et 32 fois")
-    axis.set_ylabel("Temps complet du processus (ms)")
-    axis.set_ylim(bottom=0)
-    axis.set_xlim(left=0)
-    axis.grid(alpha=0.18)
-    axis.legend(frameon=False)
-    figure.suptitle("Quand le volume augmente", x=0.085, ha="left", fontsize=17, weight="bold")
-    axis.set_title('Même motif : « Elizabeth » · moyenne ± un écart type · les segments relient seulement les observations',
-                   loc="left", fontsize=10, weight="normal", pad=15)
-    figure.tight_layout()
-    save(figure, "scaling", "Temps selon le volume, à motif et corpus de base constants")
+    def row(key, engine):
+        c = groups[key]['DFA' if engine == 'grep' else engine]
+        return cs[c['id'], 'grep' if engine == 'grep' else 'java']
 
-    # Histogrammes : mêmes nombres d'observations et mêmes axes d'effectifs ; abscisses propres à chaque moteur.
-    figure, axes = plt.subplots(1, 3, figsize=(12.3, 4.6), sharey=True)
-    for axis, (label, color, engine, identifier) in zip(axes, [
-            ("Java · KMP", NAVY, "java", "literal-auto"),
-            ("Java · automate", ORANGE, "java", "literal-automaton"),
-            ("GNU grep", TEAL, "grep", "literal-auto")]):
-        values = [int(row["elapsed_ns"]) / 1_000_000 for row in runs[identifier] if row["engine"] == engine]
-        axis.hist(values, bins=6, color=color, alpha=0.9, edgecolor="white")
-        median = float(summaries[identifier][engine]["median_ms"])
-        axis.axvline(median, linestyle="--", color=INK, linewidth=1.5, label=f"Médiane : {median:.1f} ms")
-        axis.set_title(label, fontsize=12)
-        axis.set_xlabel("Durée (ms)")
-        axis.legend(fontsize=9, frameon=False)
-        axis.grid(axis="y", alpha=0.15)
-        axis.set_axisbelow(True)
-    axes[0].set_ylabel("Nombre de mesures")
-    figure.suptitle('Dispersion sur « Elizabeth » · corpus ×1', x=0.055, ha="left", fontsize=17, weight="bold")
-    figure.text(0.055, 0.89,
-                f"{manifest['runs_per_engine']} observations par panneau · échelles horizontales différentes · aucun point retiré",
-                fontsize=10)
-    figure.tight_layout(rect=(0, 0, 1, 0.86))
-    save(figure, "distribution", "Distribution des temps de processus sur un motif littéral")
-    print(f"Figures créées dans {args.output}")
+    def save(fig, name, keys):
+        fig.text(.01,.008,note,fontsize=8,color='#526477')
+        metadata={'Title':name,'Description':json.dumps({k:case(k)['regex'] for k in keys},ensure_ascii=False)}
+        fig.savefig(args.output/f'{name}.svg',bbox_inches='tight',metadata={**metadata,'Date':manifest['finished_utc']})
+        fig.savefig(args.output/f'{name}.png',bbox_inches='tight',dpi=145,metadata=metadata)
+        plt.close(fig)
+
+    def bars(keys, name, title):
+        fig,ax=plt.subplots(figsize=(15,3+len(keys)*1.05))
+        for engine,shift in zip(('KMP','DFA','DFAM','grep'),(-.27,-.09,.09,.27)):
+            selected=[(i,k) for i,k in enumerate(keys) if engine=='grep' or engine in groups[k]]
+            stats=[row(k,engine) for _,k in selected]
+            med=np.array([r['median_ms'] for r in stats])
+            err=[[r['median_ms']-r['q25_ms'] for r in stats],[r['q75_ms']-r['median_ms'] for r in stats]]
+            rectangles=ax.barh([i+shift for i,_ in selected],med,height=.16,xerr=err,capsize=2,
+                               color=COLORS[engine],label=NAMES[engine])
+            for rect,r in zip(rectangles,stats):
+                ax.annotate(f"{r['median_ms']:.1f}"+(' *' if r['noisy'] else ''),
+                    (r['q75_ms'],rect.get_y()+rect.get_height()/2),xytext=(5,0),textcoords='offset points',va='center',fontsize=8)
+        ax.set_yticks(range(len(keys)),[label(k) for k in keys],fontsize=9)
+        ax.invert_yaxis(); ax.set_xlim(0,ax.get_xlim()[1]*1.12)
+        ax.set_xlabel('Commande complète (ms) · médiane et IQR de 30 processus · démarrage JVM inclus')
+        ax.grid(axis='x',alpha=.15);ax.set_axisbelow(True)
+        ax.legend(loc='upper center',bbox_to_anchor=(.5,-.11),ncol=4,frameon=False,fontsize=9)
+        ax.set_title('Regex exacte à gauche · KMP absent = non applicable aux opérateurs regex\n* IQR/médiane > 15 % · aucun point retiré · grep : série associée au cas DFA',loc='left',fontsize=10,pad=14)
+        fig.suptitle(title,fontsize=17,weight='bold',x=.02,ha='left')
+        fig.tight_layout(rect=(0,.10,1,.94));save(fig,name,keys)
+
+    book=[k for k in groups if case(k)['group']=='book']
+    bars(book,'latency','DFA, DFAM, KMP et egrep · même corpus et même motif')
+    stress=[k for k in groups if case(k)['group'] in {'stress','growth'} and case(k).get('cli',True)]
+    bars(stress,'stress','Préfixes répétés et croissance du DFA · corpus synthétique')
+
+    fig,axes=plt.subplots(1,2,figsize=(15,7))
+    allkeys=[]
+    for ax,keys in zip(axes,[['literal','scale-literal-8','scale-literal-32'],['complex','scale-complex-8','scale-complex-32']]):
+        allkeys+=keys
+        sizes=[manifest['corpora'][case(k)['corpus']]['bytes']/1024**2 for k in keys]
+        for engine in ('KMP','DFA','DFAM','grep'):
+            if engine!='grep' and engine not in groups[keys[0]]:continue
+            stats=[row(k,engine) for k in keys]
+            ax.errorbar(sizes,[r['median_ms'] for r in stats],
+                yerr=[[r['median_ms']-r['q25_ms'] for r in stats],[r['q75_ms']-r['median_ms'] for r in stats]],
+                fmt='o-',capsize=3,color=COLORS[engine],label=NAMES[engine])
+        ax.set(xlabel='Corpus répété ×1, ×8, ×32 (Mio)',ylabel='Commande complète (ms)',xlim=(0,None),ylim=(0,None))
+        ax.set_title('Regex exacte :\n'+label(keys[0]),fontsize=9,loc='left',pad=12)
+        ax.grid(alpha=.15);ax.legend(frameon=False,fontsize=8)
+    fig.suptitle('Effet du volume · médiane et IQR de 30 processus',fontsize=16,weight='bold',x=.04,ha='left')
+    fig.text(.04,.89,'KMP comparé sur Elizabeth seulement · les segments entre trois volumes ne prouvent pas une complexité',fontsize=10)
+    fig.tight_layout(rect=(0,.05,1,.83));save(fig,'scaling',allkeys)
+
+    fig,axes=plt.subplots(1,4,figsize=(16,5))
+    for ax,engine in zip(axes,('KMP','DFA','DFAM','grep')):
+        identifier=groups['literal']['DFA' if engine=='grep' else engine]['id']
+        values=[r['elapsed_ns']/1e6 for r in cli if r['case_id']==identifier and r['phase']=='measure'
+                and r['engine']==('grep' if engine=='grep' else 'java')]
+        stats=row('literal',engine)
+        ax.plot(range(1,len(values)+1),values,'o-',markersize=3,linewidth=.8,color=COLORS[engine])
+        ax.axhspan(stats['q25_ms'],stats['q75_ms'],color=COLORS[engine],alpha=.12,label='IQR')
+        ax.axhline(stats['median_ms'],color='#233249',linestyle='--',label='Médiane')
+        ax.set(title=NAMES[engine],xlabel="Ordre d'exécution",ylabel='Processus complet (ms)',ylim=(0,None))
+        ax.legend(fontsize=8,frameon=False);ax.grid(alpha=.15)
+    fig.suptitle('Toutes les observations · regex exacte : Elizabeth',fontsize=16,weight='bold',x=.04,ha='left')
+    fig.text(.04,.89,'30 processus par moteur · axes verticaux propres à chaque panneau · aucun point retiré',fontsize=10)
+    fig.tight_layout(rect=(0,.05,1,.84));save(fig,'distribution',['literal'])
+
+    fig,axes=plt.subplots(1,4,figsize=(19,10),sharey=True)
+    for ax,metric,title in zip(axes,('minimization_ns','preparation_ns','scan_ns','total_ns'),('Hopcroft seul','Préparation totale','Lecture + recherche','Pipeline complet')):
+        for engine,shift in zip(('KMP','DFA','DFAM'),(-.2,0,.2)):
+            for i,key in enumerate(book):
+                if engine not in groups[key]:continue
+                c=groups[key][engine];r=js[c['id'],metric]
+                means=[statistics.mean(v[metric]/1e6 for v in jvm if v['case_id']==c['id'] and v['fork']==fork and v['phase']=='measure') for fork in range(1,profile['jvm']['forks']+1)]
+                ax.plot([r['min_ms'],r['max_ms']],[i+shift]*2,color=COLORS[engine],alpha=.5)
+                ax.scatter(means,[i+shift]*len(means),s=16,color=COLORS[engine],alpha=.7)
+                ax.scatter([r['median_ms']],[i+shift],color='#233249',marker='|',s=100)
+            ax.plot([],[], 'o',color=COLORS[engine],label=NAMES[engine])
+        ax.set(title=title,xlabel='ms · moyennes de JVM',xlim=(-.001,None));ax.locator_params(axis='x',nbins=4)
+        ax.grid(axis='x',alpha=.15)
+    axes[0].set_yticks(range(len(book)),[label(k) for k in book],fontsize=9);axes[0].invert_yaxis()
+    handles,names=axes[-1].get_legend_handles_labels()
+    fig.legend(handles,names,loc='lower center',bbox_to_anchor=(.65,.035),ncol=3,frameon=False,fontsize=9)
+    fig.suptitle('Coût de la minimisation et du parcours · DFA / DFAM / KMP',fontsize=17,weight='bold',x=.02,ha='left')
+    fig.text(.02,.915,'5 JVM par cas · 10 prépassages puis 10 mesures · point = moyenne de JVM ; trait noir = médiane ; segment = min–max\nMême préparation reconstruite à chaque invocation · IO incluses · Hopcroft vaut zéro en DFA/KMP et pour le raccourci nullable',fontsize=10)
+    fig.tight_layout(rect=(0,.05,1,.87));save(fig,'phases',book)
+
+    growth=[k for k in groups if case(k)['group']=='growth']
+    fig,axes=plt.subplots(1,2,figsize=(14,7))
+    depths=[case(k)['branch_depth'] for k in growth]
+    for metric,name,color in [('nfa_states','NFA','#526477'),('search_dfa_states','DFA',COLORS['DFA']),('dfam_states','DFAM',COLORS['DFAM'])]:
+        values=[manifest['automata'][case(k)['id']][metric] for k in growth]
+        axes[0].plot(depths,values,'o-',color=color,label=name)
+        for x,y in zip(depths,values):axes[0].annotate(str(y),(x,y),xytext=(3,4 if metric!='dfam_states' else -13),textcoords='offset points',fontsize=8)
+    axes[0].set(xlabel='Nombre d de blocs (a|b)',ylabel="Nombre d'états")
+    for engine,metric,name,color in [('DFA','preparation_ns','Préparation DFA',COLORS['DFA']),('DFAM','preparation_ns','Préparation DFAM',COLORS['DFAM']),('DFAM','minimization_ns','Hopcroft seul','#233b63')]:
+        stats=[js[groups[k][engine]['id'],metric] for k in growth]
+        axes[1].errorbar(depths,[r['median_ms'] for r in stats],
+            yerr=[[r['median_ms']-r['min_ms'] for r in stats],[r['max_ms']-r['median_ms'] for r in stats]],fmt='o-',capsize=3,color=color,label=name)
+    axes[1].set(xlabel='Nombre d de blocs (a|b)',ylabel='Temps (ms)',ylim=(0,None))
+    for ax in axes:ax.set_xticks(depths);ax.grid(alpha=.15);ax.legend(frameon=False)
+    fig.suptitle('Croissance du DFA et effet de Hopcroft',fontsize=17,weight='bold',x=.04,ha='left')
+    fig.text(.04,.88,'Regex exécutée : (a|b)*a, puis d copies de (a|b), puis b ; d = 5, 7, 9\nProfil structurel hors chronométrage · médiane et min–max des 5 moyennes de JVM',fontsize=10)
+    fig.tight_layout(rect=(0,.05,1,.82));save(fig,'compilation',growth)
+    print(f'Six figures comparatives SVG et PNG créées dans {args.output}')
 
 
-if __name__ == "__main__":
+if __name__=='__main__':
     main()

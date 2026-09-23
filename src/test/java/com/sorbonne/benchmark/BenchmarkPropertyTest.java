@@ -57,10 +57,20 @@ class BenchmarkPropertyTest {
         Path file = Files.writeString(directory.resolve(seed + ".txt"), content, StandardCharsets.UTF_8);
         Pattern oracle = Pattern.compile(expression, Pattern.DOTALL);
         long expected = lines.stream().filter(line -> oracle.matcher(line).find()).count();
-        for (Benchmark.Strategy strategy : List.of(Benchmark.Strategy.AUTO, Benchmark.Strategy.AUTOMATON)) {
+        for (Benchmark.Strategy strategy : List.of(Benchmark.Strategy.AUTO, Benchmark.Strategy.DFA, Benchmark.Strategy.DFAM, Benchmark.Strategy.AUTOMATON)) {
             Benchmark.Result result = new Benchmark(file, expression, strategy).pipeline();
             assertEquals(lines.size(), result.totalLines(), expression);
             assertEquals(expected, result.matchingLines(), expression + " / " + strategy);
+            List<String> expectedLines = new ArrayList<>();
+            for (int i = 0; i < lines.size(); i++) {
+                if (oracle.matcher(lines.get(i)).find()) {
+                    expectedLines.add((i + 1) + ":" + lines.get(i));
+                }
+            }
+            List<String> actualLines = new ArrayList<>();
+            new Benchmark(file, expression, strategy).forEachMatchingLine(
+                    (number, line) -> actualLines.add(number + ":" + line));
+            assertEquals(expectedLines, actualLines, expression + " / lignes / " + strategy);
         }
     }
 }

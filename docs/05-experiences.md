@@ -1,188 +1,104 @@
 [← Validation](04-validation.md) · [Accueil](../README.md) · [Perspectives →](06-perspectives.md)
 
-# 05 — Mesurer sans changer la question
+# 05 — Comparaison DFA, DFAM, KMP et egrep
 
-## 1. Les questions de la campagne
+Le profil [`report-v4-dfa-dfam-kmp-grep`](../scripts/report-profile.json) mesure le code optimisé avec Hopcroft. Le [rapport chiffré](assets/benchmark.md) compare les moteurs côte à côte ; le [manifeste](assets/benchmark.json) conserve les versions, paramètres, empreintes, tailles et statistiques. Les mesures sont locales à cette machine et ne constituent pas une preuve asymptotique.
 
-La campagne cherche à éclairer trois points précis : le coût du chemin automate par rapport à KMP sur un même mot, l’effet du volume de texte et l’écart observé avec une commande GNU grep. Elle ne cherche pas à classer tous les moteurs regex ni à établir une loi de performance valable pour toute expression.
+## 1. Comparer le même travail
 
-Le point de comparaison est un usage en ligne de commande : un fichier, un motif, une exécution qui compte les lignes correspondantes. Ce choix correspond aux scripts disponibles et évite de soustraire artificiellement le démarrage de Java tout en conservant celui de grep.
+`DFA` construit le NFA puis le DFA de recherche et indexe ses transitions. `DFAM` exécute exactement cette chaîne en ajoutant Hopcroft avant la même indexation. `KMP` est imposé sur les littéraux uniquement. GNU grep est appelé avec `-E`, l’équivalent d’egrep. Tous recherchent une sous-chaîne dans chaque ligne et comptent chaque ligne au plus une fois.
 
-## 2. Corpus et environnement
+La comparaison à quatre moteurs porte sur `Elizabeth` (livre ×1/×8/×32) et `ababababac` (synthétique). KMP n’est **pas applicable** aux alternatives, wildcards et répétitions : sa case est N/A, jamais un zéro fictif. Pour `(a|b)*`, le pipeline utilise son raccourci commun sans automate ; ce cas ne mesure pas la minimisation. `AUTO` et `AUTOMATON` restent disponibles mais les expériences imposent une stratégie explicite.
 
-Le fichier de base est [`Samples/PrideAndPrejudice.txt`](../Samples/PrideAndPrejudice.txt), une copie de *Pride and Prejudice* de Jane Austen, issue de Project Gutenberg, livre n° 1342 d’après son en-tête. Le document entier est utilisé, notices et en-têtes compris. Les comptes ne décrivent donc pas seulement le corps du roman.
+## 2. Paramètres fixes et regex exactes
 
-| Paramètre | Valeur de la campagne publiée |
-| :--- | :--- |
-| Date | 22 septembre 2026, de 20:41:55 à 20:42:39 UTC |
-| Système | macOS 26.6.2, architecture arm64 |
-| Processeurs logiques annoncés par Python | 12 ; aucun verrouillage d’affinité appliqué |
-| JVM | Temurin OpenJDK 21.0.12+8, 64 bits |
-| Référence | `ggrep`, GNU grep 3.12, exécuté sur la même machine |
-| Pilote de mesure | Python 3.14.7, `time.perf_counter_ns()` |
-| Locale des processus | `C.UTF-8` |
-| Répétitions | 20 mesures par moteur et par expérience |
-| Passages préalables | 3 par moteur, plus un appel de validation par moteur |
-| Ordre dans chaque paire | Mélangé avec la graine 42 |
-| Minimisation | Non implémentée : `DFAM` retourne son argument |
+- Java 21, `-Xms64m -Xmx512m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -Dfile.encoding=UTF-8`.
+- Graine CLI `20260923`, JVM `20260924`.
+- 32 cas Java, dont 30 cas CLI. Trois prépassages puis cinq blocs de six paires Java/grep : 30 processus mesurés par moteur et cas CLI.
+- Cinq JVM par cas, chacune avec dix prépassages puis dix mesures ; chaque invocation reconstruit le motif et lit le fichier.
+- Timeout de 60 s par processus CLI et 180 s par fork ou profil structurel.
+- Aucun point supprimé. Signalement fixé avant mesure : IQR/médiane > 15 %.
 
-Il s’agit de GNU grep exécuté **sous macOS**, pas d’une expérience réalisée sur un noyau Linux. Le modèle exact du processeur et la quantité de mémoire ne sont pas renseignés dans cette campagne ; les résultats doivent être considérés comme locaux à cet environnement.
+| Groupe | Regex exécutée | Corpus | Stratégies Java |
+| :--- | :--- | :--- | :--- |
+| literal | `Elizabeth` | book-1 | KMP, DFA, DFAM |
+| alternative | `(Elizabeth\|Darcy\|Bennet\|Bingley\|Collins\|Wickham)` | book-1 | DFA, DFAM |
+| wildcard | `(Elizabeth\|Darcy\|Bennet\|Bingley).*(said\|replied\|answered\|cried)` | book-1 | DFA, DFAM |
+| absent | `(ZXQ\|QXZ).*(NEVER\|PRESENT)` | book-1 | DFA, DFAM |
+| nullable | `(a\|b)*` | book-1 | DFA, DFAM |
+| complex | `((Elizabeth\|Darcy\|Bennet\|Bingley).*(said\|replied\|answered\|cried))\|((Mr\|Mrs)\..*(Bennet\|Darcy\|Bingley))` | book-1 | DFA, DFAM |
+| scale-literal-8 | `Elizabeth` | book-8 | KMP, DFA, DFAM |
+| scale-complex-8 | `((Elizabeth\|Darcy\|Bennet\|Bingley).*(said\|replied\|answered\|cried))\|((Mr\|Mrs)\..*(Bennet\|Darcy\|Bingley))` | book-8 | DFA, DFAM |
+| scale-literal-32 | `Elizabeth` | book-32 | KMP, DFA, DFAM |
+| scale-complex-32 | `((Elizabeth\|Darcy\|Bennet\|Bingley).*(said\|replied\|answered\|cried))\|((Mr\|Mrs)\..*(Bennet\|Darcy\|Bingley))` | book-32 | DFA, DFAM |
+| overlap | `ababababac` | synthetic | KMP, DFA, DFAM |
+| growth-5 | `(a\|b)*a(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)b` | synthetic | DFA, DFAM |
+| growth-7 | `(a\|b)*a(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)b` | synthetic | DFA, DFAM |
+| growth-9 | `(a\|b)*a(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)b` | synthetic | DFA, DFAM |
 
-Le fichier original fait **772 386 octets**. La copie UTF-8 avec fins de ligne LF fait **757 471 octets**, pour **14 915 lignes**. Le comparateur traite cette normalisation avant les mesures et donne exactement la même copie aux deux programmes. Elle évite que les CRLF du fichier d’origine soient interprétés différemment par `BufferedReader` et grep.
+Les cas `growth-9` sont réservés aux JVM échauffées, pour les **deux** stratégies DFA et DFAM. Le livre est la copie `Samples/PrideAndPrejudice.txt`, notices incluses, normalisée en UTF-8/LF puis répétée ×8 et ×32. Son empreinte est fixée dans le profil. Le corpus synthétique contient 2 048 répétitions de cinq lignes : 127 `a` puis `b` ; 128 `a` puis `c` ; 64 copies de `ab` puis `ac` ; 128 `x` ; 32 `é` puis `été`. Chaque ligne se termine par LF.
 
-L’empreinte du fichier original est :
+## 3. Contrôles et unité statistique
 
-```text
-3f6bb9d6f78e0293b56acd4714dd68cb7d6d1d293402031ce9d5a216bcaf9d75
-```
+Avant de chronométrer, la campagne exécute les tests et compare pour les 32 cas les sorties complètes `Main --print` et `grep -E -n`, octet par octet : mêmes numéros et contenus, pas seulement les mêmes comptes. Les comptes sont revérifiés à chaque invocation. Les textes invalides, NUL ou hors BMP sont exclus du protocole commun. Une différence, une erreur ou un délai dépassé arrête la campagne.
 
-Les empreintes du corpus normalisé et de chaque corpus répété se trouvent dans les `metadata.json`. Le [manifeste de campagne](results/2026-09-22/campaign.json) conserve aussi les empreintes des fichiers sources. Le dépôt comportait des modifications non commitées au moment de l’expérience : le hash du commit seul ne suffit donc pas à identifier le code mesuré.
+Pour chaque bloc CLI, l’ordre des cas est mélangé. Chaque cas comporte trois paires Java puis grep et trois paires grep puis Java, dans un ordre mélangé. Les durées incluent démarrage JVM, préparation, lecture, recherche et sortie du compteur. Les prépassages CLI sollicitent le cache disque, sans conserver le JIT entre processus. La série grep affichée pour une comparaison est celle du **cas DFA** associé ; les autres séries grep restent dans les CSV, sans mélange opportuniste.
 
-## 3. Ce qui entre dans le chronomètre
+Les mesures internes utilisent cinq JVM distinctes par cas. On calcule d’abord la moyenne des dix mesures d’un fork, puis les statistiques sur les **cinq moyennes** ; les cinquante observations ne sont pas traitées comme indépendantes. Préparation, minimisation et parcours restent séparés. Lecture et décodage sont inclus dans le parcours. Les médianes de phases ne sont pas additives. Les quartiles sont inclusifs et les intervalles affichés décrivent une dispersion, pas un intervalle de confiance.
 
-```mermaid
-sequenceDiagram
-    participant P as Pilote Python
-    participant J as Processus Java
-    participant G as Processus GNU grep
-    Note over P: Compilation et normalisation hors mesure
-    P->>J: Validation du compte
-    J-->>P: Nombre de lignes
-    P->>G: Validation du compte
-    G-->>P: Nombre de lignes
-    Note over P: Arrêt si les comptes diffèrent
-    loop Passages préalables puis 20 paires mesurées
-        Note over P: Ordre Java / grep mélangé à chaque paire
-        P->>J: Lancement et début du chronomètre
-        Note over J: JVM + préparation + IO + recherche
-        J-->>P: Compte puis terminaison
-        Note over P: Arrêt du chronomètre et vérification
-        P->>G: Lancement et début du chronomètre
-        Note over G: Préparation + IO + recherche
-        G-->>P: Compte puis terminaison
-        Note over P: Arrêt du chronomètre et vérification
-    end
-```
+Les états et arcs NFA/DFA/DFAM sont collectés hors chronométrage, une fois par regex distincte, et recopiés pour ses cas. Ce diagnostic construit aussi les graphes des littéraux KMP et des motifs nullables ; ces constructions ne sont **pas** exécutées par leurs chemins chronométrés. Les sources, classes et corpus sont hachés avant/après ; les résumés sont recalculés depuis les CSV avant tout tracé ou publication.
 
-Le schéma montre l’ordre Java puis grep pour la lisibilité ; l’ordre réel est enregistré pour chaque mesure dans `runs.csv`.
+## 4. Lire les six figures
 
-Les commandes sont `Main --count` et `grep -E -c`. Les sorties sont capturées, sans afficher les lignes du fichier. Pour les deux processus, la durée inclut le lancement, la préparation, les entrées-sorties, la recherche, l’écriture du nombre et l’attente de la terminaison. La validation numérique du résultat est effectuée après l’arrêt du chronomètre.
+![DFA, DFAM, KMP et GNU grep, regex exactes à gauche](assets/latency.svg)
 
-Chaque appel Java lance une **nouvelle JVM**. Les passages préalables sollicitent le cache du système, mais ne conservent pas un JIT échauffé pour l’appel suivant. Les mesures ne représentent donc ni un service Java déjà chargé ni un benchmark de recherche pure en mémoire.
+Chaque groupe utilise le même motif et le même livre ×1. Barres : médianes de processus ; segments : Q1–Q3. L’absence de KMP signifie non applicable.
 
-Le comparateur refuse les regex hors du sous-ensemble commun, les octets UTF-8 invalides, les NUL et les caractères hors BMP. Cette dernière restriction aligne la consommation d’un caractère par le point universel : les moteurs du projet travaillent sur des `char` UTF-16, tandis que grep en locale UTF-8 utilise les caractères décodés.
+![Volume ×1, ×8, ×32 : Elizabeth et regex complexe écrites sur les panneaux](assets/scaling.svg)
 
-## 4. Dix expériences, 400 mesures
+À gauche, `Elizabeth` compare les quatre moteurs. À droite, la regex complexe compare DFA, DFAM et grep. Le motif reste constant lorsque le corpus grandit.
 
-Les six premières expériences utilisent le corpus de base. Les quatre autres reprennent `Elizabeth` avec des fichiers composés de huit, puis trente-deux copies du même livre.
+![Trente observations par moteur, regex exacte Elizabeth](assets/distribution.svg)
 
-| Cas | Motif | Chemin Java | Lignes correspondantes, corpus ×1 |
-| :--- | :--- | :--- | ---: |
-| Littéral | `Elizabeth` | `AUTO`, donc KMP | 644 |
-| Même littéral | `Elizabeth` | `AUTOMATON` imposé | 644 |
-| Alternative | `Elizabeth\|Darcy` | Automate | 1 050 |
-| Point et étoile | `Eli.*beth` | Automate | 644 |
-| Motif absent | `ZZZ_NOT_PRESENT_2026` | KMP | 0 |
-| Mot vide accepté | `a*` | Automate | 14 915 |
+Les trente processus sont visibles dans leur ordre relatif ; les axes verticaux sont propres à chaque panneau.
 
-Le cas absent oblige la recherche à conclure à l’absence sur chaque ligne. Le cas `a*` permet au moteur de répondre immédiatement à la réception d’une ligne, puisque son langage contient ε. Le pipeline lit toutefois encore toutes les lignes pour les compter.
+![Coût Hopcroft, préparation, lecture-recherche et total par regex](assets/phases.svg)
 
-L’accord entre `Eli.*beth` et `Elizabeth` sur ce livre ne signifie pas que ces expressions décrivent le même langage. Il s’agit seulement d’un même nombre de lignes correspondantes dans ce corpus.
+Chaque point est la moyenne d’une JVM ; le trait noir est la médiane des cinq moyennes et le segment va du minimum au maximum. Hopcroft vaut zéro pour DFA/KMP et le raccourci nullable.
 
-Les fichiers répétés ont les tailles suivantes :
+![Corpus synthétique, regex ababababac et familles à profondeur 5 et 7](assets/stress.svg)
 
-| Facteur | Octets UTF-8 normalisés | Lignes | Lignes contenant `Elizabeth` |
-| :--- | ---: | ---: | ---: |
-| ×1 | 757 471 | 14 915 | 644 |
-| ×8 | 6 059 768 | 119 320 | 5 152 |
-| ×32 | 24 239 072 | 477 280 | 20 608 |
+Motifs : `ababababac`, `(a|b)*a(a|b)(a|b)(a|b)(a|b)(a|b)b` et `(a|b)*a(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)b`.
 
-Cette construction garde la distribution des longueurs de lignes et des occurrences. Elle isole mieux le volume qu’une comparaison entre trois livres différents, mais n’apporte aucune diversité linguistique supplémentaire.
+![États et préparation pour (a|b)*a suivi de 5, 7 ou 9 blocs (a|b), puis b](assets/compilation.svg)
 
-## 5. Résultats sur le livre de base
+La famille de croissance montre les états avant/après Hopcroft et la préparation totale avec/sans minimisation. Réduire le nombre d’états ne garantit pas un gain global : le coût de minimisation doit être amorti par le parcours. Les trois profondeurs ne démontrent pas une complexité à elles seules.
 
-![Durées moyennes des commandes selon le motif, avec un écart type](assets/latency.svg)
-
-Toutes les valeurs de ce tableau sont des **millisecondes de processus complet**, sous la forme moyenne ± écart type d’échantillon. Les 20 observations de chaque série sont conservées, sans retrait de valeur extrême.
-
-| Cas | Java | GNU grep |
-| :--- | ---: | ---: |
-| Littéral, KMP | 66,82 ± 5,91 | 5,57 ± 0,29 |
-| Littéral, automate imposé | 94,93 ± 2,17 | 5,51 ± 0,36 |
-| Alternative | 91,74 ± 1,67 | 5,94 ± 0,31 |
-| Point et étoile | 93,50 ± 3,34 | 5,92 ± 0,27 |
-| Littéral absent | 81,38 ± 4,60 | 5,42 ± 0,39 |
-| Mot vide accepté | 87,63 ± 3,59 | 5,63 ± 0,43 |
-
-Sur `Elizabeth`, KMP est plus rapide que le chemin automate dans cette campagne. Cela concorde avec un coût de préparation plus faible et une recherche sans index de graphe. La mesure complète ne permet pas d’attribuer séparément l’écart à la déterminisation, aux allocations, au JIT ou au parcours : il faudrait répéter et analyser les durées internes pour cela.
-
-Le motif `a*` est instructif. Le moteur préparé sait répondre sans parcourir les caractères, mais la commande prend encore environ 88 ms. Le résultat montre qu’une recherche localement très courte n’annule pas le coût du processus et de la lecture du fichier. Il ne constitue pas une mesure directe du seul démarrage de la JVM.
-
-GNU grep est plus rapide pour tous ces cas. Le manuel décrit plusieurs optimisations possibles selon les motifs, dont des chemins spécialisés pour les chaînes fixes. Nous ne déduisons pas de ces temps quel algorithme interne a été choisi pour une expression donnée. Voir la [section Performance du manuel GNU grep](https://www.gnu.org/s/grep/manual/html_node/Performance.html).
-
-## 6. Effet du volume sur un même motif
-
-![Évolution des durées pour Elizabeth sur le livre répété une, huit et trente-deux fois](assets/scaling.svg)
-
-La figure utilise la référence grep enregistrée dans les expériences KMP. Les expériences automate contiennent leurs propres répétitions grep, consultables dans les données brutes ; elles ne sont pas fusionnées pour fabriquer une série supplémentaire.
-
-| Corpus | Java KMP | Java automate | GNU grep, campagne KMP |
-| :--- | ---: | ---: | ---: |
-| ×1 | 66,82 ± 5,91 ms | 94,93 ± 2,17 ms | 5,57 ± 0,29 ms |
-| ×8 | 102,74 ± 3,50 ms | 222,05 ± 9,01 ms | 9,37 ± 0,44 ms |
-| ×32 | 171,23 ± 4,87 ms | 625,74 ± 32,69 ms | 21,04 ± 0,45 ms |
-
-À ×32, le chemin automate prend environ **3,65 fois** le temps du chemin KMP dans ces exécutions complètes. Les deux retrouvent pourtant les mêmes 20 608 lignes. Cette observation justifie l’intérêt du chemin spécialisé pour ce motif et ce corpus ; elle ne prouve pas que KMP l’emporte sur toute machine et toute distribution de textes.
-
-Multiplier le fichier par 32 ne multiplie pas le temps KMP par 32. C’est compatible avec la présence de coûts fixes et l’évolution de l’exécution pendant un processus plus long. Nous n’ajustons pas de modèle causal sur seulement trois tailles : les segments relient les observations et ne constituent pas une démonstration expérimentale de complexité.
-
-L’analyse théorique établit une recherche préparée linéaire en la longueur du texte. La campagne observe le programme complet, où lecture, allocations, caches et JVM se superposent. Les deux niveaux d’analyse se complètent sans être interchangeables.
-
-## 7. La dispersion compte aussi
-
-![Histogrammes des vingt durées sur Elizabeth, pour KMP, automate et GNU grep](assets/distribution.svg)
-
-Les trois panneaux ont des échelles horizontales différentes, indiquées par leurs axes. Le trait vertical repère la médiane. L’histogramme KMP de cette campagne présente des observations réparties en deux zones ; vingt points ne suffisent pas à en déterminer la cause. Nous conservons cette forme au lieu de résumer les résultats par le meilleur temps.
-
-Pour des observations $t_1,\ldots,t_p$, les indicateurs utilisés sont :
-
-$$
-\bar t=\frac{1}{p}\sum_{i=1}^{p}t_i,
-\qquad
-s=\sqrt{\frac{1}{p-1}\sum_{i=1}^{p}(t_i-\bar t)^2}.
-$$
-
-Les barres d’erreur représentent $s$, pas un intervalle de confiance. La médiane est également exportée pour disposer d’un indicateur moins sensible à quelques mesures longues. Aucun test de significativité ni classement probabiliste n’est présenté.
-
-## 8. Menaces sur la validité
-
-**Une seule campagne et une seule machine.** Les résultats ne couvrent pas la diversité des systèmes Linux, des disques ou des JVM. La charge de fond et la politique énergétique n’ont pas été contrôlées. Les expériences ont été exécutées en série, sans benchmarks concurrents lancés par la campagne, mais sans isolement matériel.
-
-**Cache sollicité.** Copier et valider le corpus avant la mesure favorise sa présence dans les caches. Nous ne mesurons pas une lecture disque froide et ne vidons pas le cache du système entre les passages.
-
-**Ordre local, pas campagne entièrement randomisée.** Java et grep changent d’ordre à chaque paire. Les dix expériences, en revanche, suivent un ordre fixe. Une dérive de charge entre le cas KMP et le cas automate reste possible ; répéter plusieurs campagnes dans un ordre différent améliorerait ce point.
-
-**Comparaison de comptes.** Toutes les mesures ont rendu le compte attendu, mais cette égalité ne prouve pas à elle seule l’égalité des ensembles de lignes. Les tests de propriétés complètent cette vérification, et une comparaison des numéros de lignes reste à ajouter.
-
-**Minimisation absente.** Les temps par automate incluent DFAM comme identité. Aucune réduction de nombre d’états n’a été attribuée à cette étape. Les résultats devront être renouvelés après son implémentation.
-
-**Paramètres non étudiés.** La longueur des motifs, la taille du tampon, les cas exponentiels, la consommation mémoire et le temps de chaque phase ne font pas l’objet d’une campagne systématique ici. Le rapport ne leur attribue pas des résultats qui n’ont pas été mesurés.
-
-## 9. Retrouver une mesure et refaire les figures
-
-Les dix sous-dossiers de [`results/2026-09-22/`](results/2026-09-22/) contiennent chacun `runs.csv`, `summary.csv` et `metadata.json`. Les sorties complètes sont conservées dans les fichiers `.txt` voisins. Par exemple :
-
-- [Mesures brutes KMP, corpus ×1](results/2026-09-22/literal-auto/runs.csv) ;
-- [Mesures brutes automate, corpus ×32](results/2026-09-22/scale-automaton-32/runs.csv) ;
-- [Configuration de l’expérience avec alternative](results/2026-09-22/alternative/metadata.json) ;
-- [Manifeste de la campagne](results/2026-09-22/campaign.json).
+## 5. Relancer et publier
 
 ```bash
-./scripts/report-campaign.sh target/rapport-reproduction --runs 20
+./scripts/report-campaign.sh             # arbre propre, tests → mesures → figures → publication
+./scripts/report-campaign.sh --allow-dirty # même protocole, résultats locaux avant les commits
+./scripts/freeze-report.sh               # publication explicite de cette campagne validée
+./scripts/clean-report.sh                # efface les résultats locaux, conserve docs/assets/
 ```
 
-Le script refuse d’écraser un dossier existant. Il ne cherche pas à reproduire exactement les mêmes nanosecondes ; il reproduit le corpus, les motifs, les règles de comparaison et le nombre de passages.
+La publication vérifie les observations, figures et sources, puis remplace les assets ensemble avec sauvegarde/restauration en cas d’échec. `--allow-dirty` ne publie pas automatiquement ; la commande explicite permet de publier avant de créer les commits. Le manifeste garde alors `git_dirty=true`, le commit de départ et les empreintes exactes du code exécuté. Aucun résultat n’est réétiqueté après coup. La campagne exécutée pour cette référence utilise ce mode.
 
-Les figures sont produites avec [Matplotlib](https://matplotlib.org/stable/users/explain/quick_start.html) par [`scripts/plot-report.py`](../scripts/plot-report.py). Le programme lit les CSV, sans recalculer ni modifier les mesures. Les exports SVG permettent l’intégration au rapport ; les PNG facilitent l’inspection et l’usage dans d’autres éditeurs. L’environnement optionnel de tracé est décrit dans le [guide d’utilisation](01-utilisation.md#5-reproduire-toute-la-campagne-du-rapport).
+Les données brutes sont locales dans `target/report/results/`, les nouvelles figures dans `target/report/figures/` pour un essai local. Seuls six SVG, `benchmark.md` et `benchmark.json` sont versionnés. `--purge` supprime les CSV/TXT après une publication automatique réussie ; pour garder la possibilité de les auditer, ne pas utiliser cette option. Le nettoyage et `mvn clean` effacent les données locales, pas les assets publiés.
 
-[← Validation](04-validation.md) · [Accueil](../README.md) · [Perspectives →](06-perspectives.md)
+## 6. Limites
+
+Cache système, température, ordonnancement et charge de fond ne sont pas contrôlés. Dix prépassages ne prouvent pas une convergence du JIT. Les chiffres caractérisent ces entrées sur cette machine, sans classement universel. La complexité théorique de Hopcroft est traitée au [chapitre algorithmique](03-algorithmes.md), séparément des observations de temps.
+
+## 7. Résultats de cette exécution
+
+Sur le livre ×1 avec la regex exacte **`Elizabeth`**, les médianes des commandes complètes sont :
+
+| KMP | DFA | DFAM | GNU grep -E |
+| ---: | ---: | ---: | ---: |
+| 56.11 ms | 87.76 ms | 88.81 ms | 5.72 ms |
+
+Pour la regex complexe écrite dans le tableau des cas, le graphe passe de **159 à 101 états**. Dans les JVM échauffées sur le livre ×1, le total médian des moyennes de forks vaut **7.986 ms avec DFA** et **8.385 ms avec DFAM** ; Hopcroft seul représente une médiane de **0.650 ms**. La réduction structurelle ne produit donc pas ici de gain total médian. Les dispersions et tous les autres cas sont dans le [rapport généré](assets/benchmark.md).
+
+Ces constats restent propres à cette campagne. Ils ne justifient ni de supprimer la minimisation ni d’annoncer qu’elle accélère systématiquement la recherche.

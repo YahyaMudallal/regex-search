@@ -1,7 +1,7 @@
 package com.sorbonne.regex;
 
-import java.util.List;
-import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 /**
  * Class representing a syntax tree returned by the {@link RegexParser}.
@@ -50,43 +50,59 @@ public class SyntaxTree {
     public String getLetter() { return letter; }
     public void setLetter(String letter) { this.letter = letter; }
 
-    @Override
-    public String toString() {
-        return toTreeString(this, "", true);
+    /** Détermine en O(m) si l'arbre accepte ε, sans utiliser la pile Java. */
+    public boolean acceptsEmpty() {
+        record Visit(SyntaxTree node, boolean expanded) {}
+        Deque<Visit> pending = new ArrayDeque<>();
+        Deque<Boolean> values = new ArrayDeque<>();
+        pending.push(new Visit(this, false));
+        while (!pending.isEmpty()) {
+            Visit visit = pending.pop();
+            SyntaxTree node = visit.node();
+            if (visit.expanded()) {
+                boolean right = values.pop();
+                boolean left = values.pop();
+                values.push(node.nodeType == NodeType.CONCATENATION ? left && right : left || right);
+            } else {
+                switch (node.nodeType) {
+                    case LETTER, DOT -> values.push(false);
+                    case STAR -> values.push(true);
+                    case PROTECTION -> pending.push(new Visit(node.left, false));
+                    case CONCATENATION, ALTERNATION -> {
+                        pending.push(new Visit(node, true));
+                        pending.push(new Visit(node.right, false));
+                        pending.push(new Visit(node.left, false));
+                    }
+                    default -> throw new IllegalArgumentException("Type de nœud non supporté : " + node.nodeType);
+                }
+            }
+        }
+        return values.pop();
     }
 
-    /**
-     * Renders the syntax tree as a branch-based text representation.
-     *
-     * @param node current node to display
-     * @param prefix indentation already applied
-     * @param isTail true when this node is the last child of its parent
-     * @return a multi-line tree representation readable in a console
-     */
-    private String toTreeString(SyntaxTree node, String prefix, boolean isTail) {
-        if (node == null) {
-            return prefix + (isTail ? "└── " : "├── ") + "∅\n";
+    /** Rendu itératif en O(nombre de nœuds + taille de la sortie). */
+    @Override
+    public String toString() {
+        record Visit(SyntaxTree node, int depth, boolean tail) {}
+        StringBuilder output = new StringBuilder();
+        StringBuilder prefix = new StringBuilder();
+        Deque<Visit> pending = new ArrayDeque<>();
+        pending.push(new Visit(this, 0, true));
+        while (!pending.isEmpty()) {
+            Visit visit = pending.pop();
+            SyntaxTree node = visit.node();
+            prefix.setLength(visit.depth() * 4);
+            output.append(prefix).append(visit.tail() ? "└── " : "├── ")
+                    .append(getNodeLabel(node)).append('\n');
+            prefix.append(visit.tail() ? "    " : "│   ");
+            if (node.right != null) {
+                pending.push(new Visit(node.right, visit.depth() + 1, true));
+            }
+            if (node.left != null) {
+                pending.push(new Visit(node.left, visit.depth() + 1, node.right == null));
+            }
         }
-
-        StringBuilder builder = new StringBuilder();
-        String connector = isTail ? "└── " : "├── ";
-        builder.append(prefix).append(connector).append(getNodeLabel(node)).append("\n");
-
-        List<SyntaxTree> children = new ArrayList<>();
-        if (node.left != null) {
-            children.add(node.left);
-        }
-        if (node.right != null) {
-            children.add(node.right);
-        }
-
-        String childPrefix = prefix + (isTail ? "    " : "│   ");
-        for (int i = 0; i < children.size(); i++) {
-            boolean last = i == children.size() - 1;
-            builder.append(toTreeString(children.get(i), childPrefix, last));
-        }
-
-        return builder.toString();
+        return output.toString();
     }
 
     /**

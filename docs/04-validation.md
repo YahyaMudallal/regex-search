@@ -56,7 +56,7 @@ Les [générateurs communs](../src/test/java/com/sorbonne/support/SearchGenerato
 | NativeSearch, littéraux | 400 | Recherche, insertion, extraction et absence garantie |
 | NativeSearch, expressions | 300 | 16 textes par préparation |
 | NativeSearch, graphes arbitraires | 150 | 12 textes par graphe avec oracle exhaustif de sous-chaînes |
-| Benchmark sur fichiers | 120 | Un fichier généré, comparaison de `AUTO` et `AUTOMATON` à l’oracle |
+| Benchmark sur fichiers | 120 | Un fichier généré, comparaison de `AUTO`, `DFA`, `DFAM` et `AUTOMATON` à l’oracle |
 
 KMP possède également un test exhaustif sur **945 couples** de petits mots binaires : les textes de longueur 0 à 5 sont croisés avec les motifs de longueur 0 à 3. Ce test vaut une seule entrée dans le compteur JUnit, même s’il contient de nombreuses assertions.
 
@@ -86,38 +86,28 @@ Les durées sont vérifiées par leurs relations : valeurs non négatives, étap
 
 Le comparateur doit distinguer zéro correspondance d’une erreur de processus. Il doit également refuser une sortie qui ressemble à un message humain au lieu d’un entier, propager un délai dépassé et ne pas comparer deux interprétations différentes du même texte.
 
-Les sept tests Python vérifient le sous-ensemble de regex accepté, la normalisation des séparateurs sans modification de la source, le rejet des encodages ou caractères exclus, les statuts de grep, les sorties incohérentes et les délais dépassés.
+Les tests Python du comparateur vérifient le sous-ensemble de regex accepté, la normalisation des séparateurs sans modification de la source, le rejet des encodages ou caractères exclus, les statuts de grep, les sorties incohérentes et les délais dépassés.
 
 Trois tests Java de `Main` protègent le mode `--count` : sortie numérique seule pour chaque stratégie, compte nul correct et rejet d’une commande incomplète. Des essais de bout en bout ont en outre couvert un lancement depuis un autre répertoire, un chemin contenant des espaces, des caractères accentués et une recherche sans résultat.
 
-## 6. État vérifié pour cette version
+## 6. État vérifié du code optimisé
 
-La commande `MAVEN_OFFLINE=1 ./run.sh` a réussi avant la campagne publiée :
+Les 458 tests de `DFAMHopcroftTest` vérifient les exemples et propriétés de minimisation, dont la conservation du langage et du comportement de recherche. Les tests du benchmark couvrent les chemins DFA sans minimisation, DFAM et le raccourci nullable. Les tests Python refusent aussi de comparer des moteurs sur des entrées différentes.
 
-| Groupe de suites JUnit | Tests |
-| :--- | ---: |
-| Démarrage et interface Main | 4 |
-| Modèle Automaton | 4 |
-| SyntaxTree, RegexParser et NFA | 22 |
-| DFA et propriétés | 564 |
-| Placeholder DFAM | 2 |
-| KMP et propriétés | 2 033 |
-| NativeSearch et propriétés | 888 |
-| Benchmark et propriétés | 143 |
-| **Total Java** | **3 660** |
+La campagne fixe exécute les tests avant toute mesure : **4 140 tests Java et 24 tests Python**. Le journal est conservé localement dans `target/report/results/validation.txt`. Les tests Python supplémentaires protègent l'équilibrage des moteurs, le calcul par fork, les contrôles d'intégrité, le refus des observations dupliquées, la restauration après une publication interrompue et la conservation des assets lors du nettoyage.
 
-Les **7 tests Python** ont également réussi. Le [relevé machine](results/2026-09-22/validation.json) conserve le détail par suite et l’empreinte des sources de test.
+La version optimisée ajoute les longues expressions sans récursion, la comparaison du chemin NFA direct, les curseurs entre blocs, les numéros et contenus exacts des lignes et les corpus normalisés par blocs. Voir le [relevé des optimisations](07-optimisations.md).
 
-Ces chiffres sont une photographie de la version décrite. Ils ne constituent ni un pourcentage de couverture ni une preuve formelle. Le test `AppTest` fourni à l’initialisation vérifie seulement une assertion vraie ; il est compté dans le total, mais ne valide aucun comportement algorithmique.
+Ces chiffres ne constituent ni un pourcentage de couverture ni une preuve formelle. `AppTest`, fourni à l'initialisation, vérifie seulement une assertion vraie ; il est compté mais ne valide aucun comportement algorithmique.
 
 ## 7. Les limites de cette validation
 
-Les expressions et graphes générés sont petits pour que les oracles exhaustifs restent utilisables. Cette borne laisse de côté certaines explosions de taille et les limites de pile sur des expressions profondément imbriquées.
+Les expressions et graphes générés sont petits pour que les oracles exhaustifs restent utilisables. Cette borne laisse de côté certaines explosions de taille. Des régressions distinctes couvrent maintenant les limites de pile sur les longues expressions.
 
 Les oracles ne sont pas tous entièrement indépendants : le simulateur NFA partage le modèle de transitions avec le code de production. La comparaison à `Pattern` et les exemples explicites réduisent ce risque de défaut commun, sans le supprimer mathématiquement.
 
-L’égalité des comptes avec grep ne garantit pas, à elle seule, que les mêmes lignes ont été sélectionnées : deux ensembles différents peuvent avoir le même cardinal. Un futur mode retournant les numéros de lignes permettra une comparaison exacte des sorties, effectuée hors chronométrage.
+L’égalité des comptes avec grep ne garantit pas, à elle seule, que les mêmes lignes ont été sélectionnées : deux ensembles différents peuvent avoir le même cardinal. Le mode retournant les numéros et contenus des lignes est maintenant comparé à un oracle sur les fichiers générés, hors chronométrage.
 
-Enfin, les tests actuels de DFAM vérifient une identité provisoire. Ils devront être remplacés ou complétés lors de la minimisation : conservation du langage, états indiscernables fusionnés, idempotence et traitement cohérent de l’état puits sont encore à vérifier.
+Les tests de `DFAM` couvrent maintenant la conservation du langage avant/après minimisation, la fusion d'états indiscernables, la suppression des états inaccessibles, les transitions partielles via un puits implicite, les classes `ANY`, l'idempotence du nombre d'états et le comportement du DFA spécialisé de recherche. Deux property tests génèrent des centaines de regex et des milliers de mots/textes reproductibles.
 
 [← Algorithmes](03-algorithmes.md) · [Accueil](../README.md) · [Expériences →](05-experiences.md)

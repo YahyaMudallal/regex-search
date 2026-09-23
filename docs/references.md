@@ -2,7 +2,7 @@
 
 # Sources, bibliographie et traçabilité
 
-Les explications algorithmiques s’appuient d’abord sur le sujet et sur le chapitre fourni dans le dépôt. Les affirmations propres à l’implémentation sont reliées aux classes Java. Les chiffres du rapport proviennent de la campagne archivée, et non d’un résultat publié pour un autre moteur.
+Les explications algorithmiques s’appuient d’abord sur le sujet et sur le chapitre fourni dans le dépôt. Les affirmations propres à l’implémentation sont reliées aux classes Java. Les chiffres du rapport proviennent de la référence expérimentale publiée et versionnée, et non d’un résultat produit pour un autre moteur.
 
 ## 1. Documents fournis avec le projet
 
@@ -14,7 +14,7 @@ Ce document fixe le périmètre : opérateurs retenus, stratégie par automates,
 **_Patterns, Automata, and Regular Expressions_, chapitre 10 fourni.**  
 [PDF local](../src/main/java/com/sorbonne/specifications/ch10.pdf).
 
-Les sections 10.2–10.4 présentent les automates et la construction des sous-ensembles. Les sections 10.5–10.8 relient les expressions régulières aux automates. Le sujet et la classe NFA désignent cette construction par la référence Aho–Ullman.
+Les sections 10.2–10.4 présentent les automates et la construction des sous-ensembles. À la fin de la section 10.4 (p. 555–556 du PDF), le passage **« Minimization of Automata »** définit l'équivalence d'états par la séparation final/non-final puis par propagation à travers les transitions, et demande de compléter un DFA partiel par un *dead state*. `DFAM` respecte cette définition ; l'algorithme de Hopcroft est utilisé comme méthode de raffinement plus efficace. Les sections 10.5–10.8 relient ensuite les expressions régulières aux automates.
 
 ## 2. Références algorithmiques et techniques
 
@@ -42,7 +42,7 @@ Bibliothèque utilisée pour produire les SVG et PNG à partir des CSV. La dépe
 
 Le corpus mesuré est la copie locale de **Jane Austen, _Pride and Prejudice_**, dont l’en-tête indique Project Gutenberg, eBook n° 1342. Cette identification est lue dans le fichier présent dans `Samples/`. Les conditions et notices du fichier sont conservées ; le benchmark ne les retire pas.
 
-Les autres textes du répertoire `Samples/` constituent des instances disponibles pour de futures campagnes. Ils ne doivent pas être présentés comme mesurés dans les figures publiées : celles-ci utilisent un seul livre et ses répétitions.
+Les autres textes du répertoire `Samples/` constituent des instances disponibles pour de futures campagnes. Ils ne doivent pas être présentés comme mesurés dans les figures publiées : celles-ci utilisent un livre, ses répétitions et un corpus synthétique déterministe.
 
 ## 4. Retrouver les preuves locales
 
@@ -51,13 +51,13 @@ Les autres textes du répertoire `Samples/` constituent des instances disponible
 | Versions de compilation et de test | [pom.xml](../pom.xml) |
 | Construction NFA | [NFA.java](../src/main/java/com/sorbonne/regex/NFA.java) |
 | Sous-ensembles et classes de caractères | [DFA.java](../src/main/java/com/sorbonne/regex/DFA.java) |
-| Minimisation encore provisoire | [DFAM.java](../src/main/java/com/sorbonne/regex/DFAM.java) |
+| Minimisation de Hopcroft | [DFAMHopcroft.java](../src/main/java/com/sorbonne/regex/DFAMHopcroft.java) |
 | Recherche de facteur par automate | [NativeSearch.java](../src/main/java/com/sorbonne/search/NativeSearch.java) |
 | Préparation et parcours KMP | [KMPSearch.java](../src/main/java/com/sorbonne/search/KMPSearch.java) |
 | Frontières du chronométrage Java | [Benchmark.java](../src/main/java/com/sorbonne/benchmark/Benchmark.java) |
 | Frontières du chronométrage externe | [compare_egrep.py](../scripts/lib/compare_egrep.py) |
-| Sources et environnement mesurés | [campaign.json](results/2026-09-22/campaign.json) |
-| État des tests | [validation.json](results/2026-09-22/validation.json) |
+| Sources et environnement mesurés | [benchmark.json](assets/benchmark.json) |
+| État des tests | [Protocole de validation](04-validation.md), journal local `target/report/results/validation.txt` |
 | Calcul et présentation des figures | [plot-report.py](../scripts/plot-report.py) |
 
-Les pages web complètent les sources locales ; elles ne servent pas de preuve aux durées mesurées. Toute nouvelle campagne doit conserver ses propres paramètres et observations.
+Les pages web complètent les sources locales ; elles ne servent pas de preuve aux durées mesurées. Chaque campagne locale conserve ses paramètres et observations jusqu’au prochain nettoyage ; seul le résumé de référence et les figures sont versionnés.

@@ -1,0 +1,333 @@
+{
+  "protocol": "report-v4-dfa-dfam-kmp-grep",
+  "seed": 20260923,
+  "source": "Samples/PrideAndPrejudice.txt",
+  "source_sha256": "7c13190c04773de0a919e38450ecaac1673fbd572a60bad784ff8421acdfec18",
+  "java_release": 21,
+  "java_options": [
+    "-Xms64m",
+    "-Xmx512m",
+    "-XX:+UseSerialGC",
+    "-XX:ActiveProcessorCount=1",
+    "-Dfile.encoding=UTF-8"
+  ],
+  "cli": {
+    "blocks": 5,
+    "pairs_per_block": 6,
+    "warmups": 3,
+    "timeout_seconds": 60
+  },
+  "jvm": {
+    "forks": 5,
+    "warmups": 10,
+    "samples_per_fork": 10,
+    "timeout_seconds": 180
+  },
+  "noise_iqr_ratio": 0.15,
+  "synthetic": {
+    "blocks": 2048,
+    "prefix_length": 128
+  },
+  "experiments": [
+    {
+      "id": "literal-kmp",
+      "comparison": "literal",
+      "label": "Littéral · KMP",
+      "regex": "Elizabeth",
+      "strategy": "KMP",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "literal-dfa",
+      "comparison": "literal",
+      "label": "Littéral · DFA",
+      "regex": "Elizabeth",
+      "strategy": "DFA",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "literal-dfam",
+      "comparison": "literal",
+      "label": "Littéral · DFAM",
+      "regex": "Elizabeth",
+      "strategy": "DFAM",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "alternative-dfa",
+      "comparison": "alternative",
+      "label": "Alternative large · DFA",
+      "regex": "(Elizabeth|Darcy|Bennet|Bingley|Collins|Wickham)",
+      "strategy": "DFA",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "alternative-dfam",
+      "comparison": "alternative",
+      "label": "Alternative large · DFAM",
+      "regex": "(Elizabeth|Darcy|Bennet|Bingley|Collins|Wickham)",
+      "strategy": "DFAM",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "wildcard-dfa",
+      "comparison": "wildcard",
+      "label": "Branches + wildcard · DFA",
+      "regex": "(Elizabeth|Darcy|Bennet|Bingley).*(said|replied|answered|cried)",
+      "strategy": "DFA",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "wildcard-dfam",
+      "comparison": "wildcard",
+      "label": "Branches + wildcard · DFAM",
+      "regex": "(Elizabeth|Darcy|Bennet|Bingley).*(said|replied|answered|cried)",
+      "strategy": "DFAM",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "absent-dfa",
+      "comparison": "absent",
+      "label": "Regex complexe absente · DFA",
+      "regex": "(ZXQ|QXZ).*(NEVER|PRESENT)",
+      "strategy": "DFA",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "absent-dfam",
+      "comparison": "absent",
+      "label": "Regex complexe absente · DFAM",
+      "regex": "(ZXQ|QXZ).*(NEVER|PRESENT)",
+      "strategy": "DFAM",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "nullable-dfa",
+      "comparison": "nullable",
+      "label": "Mot vide accepté · DFA",
+      "regex": "(a|b)*",
+      "strategy": "DFA",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "nullable-dfam",
+      "comparison": "nullable",
+      "label": "Mot vide accepté · DFAM",
+      "regex": "(a|b)*",
+      "strategy": "DFAM",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "complex-dfa",
+      "comparison": "complex",
+      "label": "Groupes + alternatives + wildcards · DFA",
+      "regex": "((Elizabeth|Darcy|Bennet|Bingley).*(said|replied|answered|cried))|((Mr|Mrs)\\..*(Bennet|Darcy|Bingley))",
+      "strategy": "DFA",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "complex-dfam",
+      "comparison": "complex",
+      "label": "Groupes + alternatives + wildcards · DFAM",
+      "regex": "((Elizabeth|Darcy|Bennet|Bingley).*(said|replied|answered|cried))|((Mr|Mrs)\\..*(Bennet|Darcy|Bingley))",
+      "strategy": "DFAM",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "scale-literal-8-kmp",
+      "comparison": "scale-literal-8",
+      "label": "Littéral ×8 · KMP",
+      "regex": "Elizabeth",
+      "strategy": "KMP",
+      "corpus": "book-8",
+      "group": "scale"
+    },
+    {
+      "id": "scale-literal-8-dfa",
+      "comparison": "scale-literal-8",
+      "label": "Littéral ×8 · DFA",
+      "regex": "Elizabeth",
+      "strategy": "DFA",
+      "corpus": "book-8",
+      "group": "scale"
+    },
+    {
+      "id": "scale-literal-8-dfam",
+      "comparison": "scale-literal-8",
+      "label": "Littéral ×8 · DFAM",
+      "regex": "Elizabeth",
+      "strategy": "DFAM",
+      "corpus": "book-8",
+      "group": "scale"
+    },
+    {
+      "id": "scale-complex-8-dfa",
+      "comparison": "scale-complex-8",
+      "label": "Complexe ×8 · DFA",
+      "regex": "((Elizabeth|Darcy|Bennet|Bingley).*(said|replied|answered|cried))|((Mr|Mrs)\\..*(Bennet|Darcy|Bingley))",
+      "strategy": "DFA",
+      "corpus": "book-8",
+      "group": "scale"
+    },
+    {
+      "id": "scale-complex-8-dfam",
+      "comparison": "scale-complex-8",
+      "label": "Complexe ×8 · DFAM",
+      "regex": "((Elizabeth|Darcy|Bennet|Bingley).*(said|replied|answered|cried))|((Mr|Mrs)\\..*(Bennet|Darcy|Bingley))",
+      "strategy": "DFAM",
+      "corpus": "book-8",
+      "group": "scale"
+    },
+    {
+      "id": "scale-literal-32-kmp",
+      "comparison": "scale-literal-32",
+      "label": "Littéral ×32 · KMP",
+      "regex": "Elizabeth",
+      "strategy": "KMP",
+      "corpus": "book-32",
+      "group": "scale"
+    },
+    {
+      "id": "scale-literal-32-dfa",
+      "comparison": "scale-literal-32",
+      "label": "Littéral ×32 · DFA",
+      "regex": "Elizabeth",
+      "strategy": "DFA",
+      "corpus": "book-32",
+      "group": "scale"
+    },
+    {
+      "id": "scale-literal-32-dfam",
+      "comparison": "scale-literal-32",
+      "label": "Littéral ×32 · DFAM",
+      "regex": "Elizabeth",
+      "strategy": "DFAM",
+      "corpus": "book-32",
+      "group": "scale"
+    },
+    {
+      "id": "scale-complex-32-dfa",
+      "comparison": "scale-complex-32",
+      "label": "Complexe ×32 · DFA",
+      "regex": "((Elizabeth|Darcy|Bennet|Bingley).*(said|replied|answered|cried))|((Mr|Mrs)\\..*(Bennet|Darcy|Bingley))",
+      "strategy": "DFA",
+      "corpus": "book-32",
+      "group": "scale"
+    },
+    {
+      "id": "scale-complex-32-dfam",
+      "comparison": "scale-complex-32",
+      "label": "Complexe ×32 · DFAM",
+      "regex": "((Elizabeth|Darcy|Bennet|Bingley).*(said|replied|answered|cried))|((Mr|Mrs)\\..*(Bennet|Darcy|Bingley))",
+      "strategy": "DFAM",
+      "corpus": "book-32",
+      "group": "scale"
+    },
+    {
+      "id": "overlap-kmp",
+      "comparison": "overlap",
+      "label": "Préfixes répétés · KMP",
+      "regex": "ababababac",
+      "strategy": "KMP",
+      "corpus": "synthetic",
+      "group": "stress"
+    },
+    {
+      "id": "overlap-dfa",
+      "comparison": "overlap",
+      "label": "Préfixes répétés · DFA",
+      "regex": "ababababac",
+      "strategy": "DFA",
+      "corpus": "synthetic",
+      "group": "stress"
+    },
+    {
+      "id": "overlap-dfam",
+      "comparison": "overlap",
+      "label": "Préfixes répétés · DFAM",
+      "regex": "ababababac",
+      "strategy": "DFAM",
+      "corpus": "synthetic",
+      "group": "stress"
+    },
+    {
+      "id": "growth-5-dfa",
+      "comparison": "growth-5",
+      "label": "Croissance profondeur 5 · DFA",
+      "regex": "(a|b)*a(a|b)(a|b)(a|b)(a|b)(a|b)b",
+      "strategy": "DFA",
+      "corpus": "synthetic",
+      "group": "growth",
+      "branch_depth": 5,
+      "cli": true
+    },
+    {
+      "id": "growth-5-dfam",
+      "comparison": "growth-5",
+      "label": "Croissance profondeur 5 · DFAM",
+      "regex": "(a|b)*a(a|b)(a|b)(a|b)(a|b)(a|b)b",
+      "strategy": "DFAM",
+      "corpus": "synthetic",
+      "group": "growth",
+      "branch_depth": 5,
+      "cli": true
+    },
+    {
+      "id": "growth-7-dfa",
+      "comparison": "growth-7",
+      "label": "Croissance profondeur 7 · DFA",
+      "regex": "(a|b)*a(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)b",
+      "strategy": "DFA",
+      "corpus": "synthetic",
+      "group": "growth",
+      "branch_depth": 7,
+      "cli": true
+    },
+    {
+      "id": "growth-7-dfam",
+      "comparison": "growth-7",
+      "label": "Croissance profondeur 7 · DFAM",
+      "regex": "(a|b)*a(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)b",
+      "strategy": "DFAM",
+      "corpus": "synthetic",
+      "group": "growth",
+      "branch_depth": 7,
+      "cli": true
+    },
+    {
+      "id": "growth-9-dfa",
+      "comparison": "growth-9",
+      "label": "Croissance profondeur 9 · DFA",
+      "regex": "(a|b)*a(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)b",
+      "strategy": "DFA",
+      "corpus": "synthetic",
+      "group": "growth",
+      "branch_depth": 9,
+      "cli": false
+    },
+    {
+      "id": "growth-9-dfam",
+      "comparison": "growth-9",
+      "label": "Croissance profondeur 9 · DFAM",
+      "regex": "(a|b)*a(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)b",
+      "strategy": "DFAM",
+      "corpus": "synthetic",
+      "group": "growth",
+      "branch_depth": 9,
+      "cli": false
+    }
+  ]
+}

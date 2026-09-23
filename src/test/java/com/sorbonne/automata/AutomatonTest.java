@@ -167,4 +167,19 @@ class AutomatonTest {
         assertEquals(Set.of(state), automaton.getStates());
         assertTrue(automaton.getTransitions().isEmpty());
     }
+    @Test
+    void outgoingIndexKeepsSnapshotsAndInsertionOrder() {
+        State start = new State("s", Status.ENTER);
+        State end = new State("f", Status.FINAL);
+        Automaton automaton = new Automaton();
+        Transition first = new Transition(start, end, 'a');
+        automaton.add(first);
+        List<Transition> snapshot = automaton.getOutgoingTransitions(start);
+        Transition second = new Transition(start, end, 'b');
+        automaton.add(second);
+        assertEquals(List.of(first), snapshot);
+        assertEquals(List.of(first, second), automaton.getOutgoingTransitions(start));
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.add(second));
+    }
+
 }
