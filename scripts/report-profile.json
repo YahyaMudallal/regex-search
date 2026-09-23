@@ -1,5 +1,5 @@
 {
-  "protocol": "report-v4-dfa-dfam-kmp-grep",
+  "protocol": "report-v5-byte-alphabet",
   "seed": 20260923,
   "source": "Samples/PrideAndPrejudice.txt",
   "source_sha256": "7c13190c04773de0a919e38450ecaac1673fbd572a60bad784ff8421acdfec18",
@@ -8,8 +8,7 @@
     "-Xms64m",
     "-Xmx512m",
     "-XX:+UseSerialGC",
-    "-XX:ActiveProcessorCount=1",
-    "-Dfile.encoding=UTF-8"
+    "-XX:ActiveProcessorCount=1"
   ],
   "cli": {
     "blocks": 5,

@@ -24,12 +24,9 @@ import com.sorbonne.automata.Transition;
  * fini de
  * classes de caractères : chaque caractère apparaissant littéralement ou dans
  * une
- * exclusion forme une classe singleton, et tous les autres caractères BMP
- * partagent
- * au plus une classe « autre ». Un état puits implicite complète ensuite la
- * fonction
- * de transition. Cette représentation conserve exactement la sémantique des
- * {@code char} Java sans matérialiser systématiquement les 65 536 caractères.
+ * exclusion forme une classe singleton, et les autres valeurs de l'alphabet 8 bits
+ * partagent au plus une classe « autre ». Un état puits implicite complète ensuite
+ * la fonction de transition sans étendre l'alphabet au-delà de 256 symboles.
  * </p>
  *
  * <p>
@@ -52,8 +49,8 @@ import com.sorbonne.automata.Transition;
  * </p>
  */
 public final class DFAMHopcroft {
-    /** Nombre de valeurs possibles d'un {@code char} Java. */
-    private static final int CHAR_COUNT = Character.MAX_VALUE + 1;
+    /** Taille de l'alphabet interne : une valeur par octet. */
+    private static final int SYMBOL_COUNT = 256;
 
     /** Empêche l'instanciation de cette classe utilitaire. */
     private DFAMHopcroft() {
@@ -110,8 +107,7 @@ public final class DFAMHopcroft {
          */
         private final boolean hasOtherClass;
         /**
-         * Indice de la classe « autre », ou -1 si les 65 536 caractères sont
-         * distingués.
+         * Indice de la classe « autre », ou -1 si les 256 symboles sont distingués.
          */
         private final int otherClass;
         /** États accessibles dans le DFA complété. */
@@ -122,6 +118,12 @@ public final class DFAMHopcroft {
          */
         private final int[][] offsets;
         private final int[][] predecessors;
+
+        private static void requireByteSymbol(char symbol) {
+            if (symbol >= SYMBOL_COUNT) {
+                throw new IllegalArgumentException("Symbole hors alphabet 8 bits : " + (int) symbol);
+            }
+        }
 
         private IndexedDfa(Automaton dfa) {
             State start = dfa.getInitialState();
@@ -147,15 +149,19 @@ public final class DFAMHopcroft {
             }
             initial = startId;
 
-            BitSet significantBits = new BitSet(CHAR_COUNT);
+            BitSet significantBits = new BitSet(SYMBOL_COUNT);
             for (Transition transition : dfa.getTransitions()) {
                 requireKnownEndpoints(ids, transition);
                 switch (transition.getType()) {
                     case EPSILON -> throw new IllegalArgumentException(
                             "DFAM exige un automate déterministe sans transition epsilon");
-                    case CHARACTER -> significantBits.set(transition.getSymbol());
+                    case CHARACTER -> {
+                        requireByteSymbol(transition.getSymbol());
+                        significantBits.set(transition.getSymbol());
+                    }
                     case ANY -> {
                         for (char excluded : transition.getExcludedSymbols()) {
+                            requireByteSymbol(excluded);
                             significantBits.set(excluded);
                         }
                     }
@@ -163,10 +169,10 @@ public final class DFAMHopcroft {
             }
 
             int significantCount = significantBits.cardinality();
-            hasOtherClass = significantCount < CHAR_COUNT;
+            hasOtherClass = significantCount < SYMBOL_COUNT;
             int alphabetSize = significantCount + (hasOtherClass ? 1 : 0);
             significant = new char[significantCount];
-            int[] classOf = new int[CHAR_COUNT];
+            int[] classOf = new int[SYMBOL_COUNT];
             Arrays.fill(classOf, -1);
             int position = 0;
             for (int code = significantBits.nextSetBit(0); code >= 0; code = significantBits.nextSetBit(code + 1)) {

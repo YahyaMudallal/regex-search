@@ -31,7 +31,7 @@ class DFAPropertyTest {
                 Automaton dfa = DFA.convert(nfa);
                 DFATest.assertDeterministic(dfa);
                 for (int trial = 0; trial < 20; trial++) {
-                    String word = SearchGenerators.text(random, 8, "abxé\n\0\uFFFF");
+                    String word = SearchGenerators.text(random, 8, "abx\u0080\u00ff\n\0");
                     assertEquals(SearchGenerators.accepts(nfa, word), SearchGenerators.accepts(dfa, word),
                             "graine=" + seed + ", essai=" + trial + ", mot=" + word);
                 }
@@ -41,7 +41,7 @@ class DFAPropertyTest {
 
     /**
      * Compare NFA puis DFA au moteur Java sur le sous-ensemble regex commun.
-     * Les textes BMP et DOTALL alignent la sémantique du point avec nos char.
+     * Les textes 8 bits et DOTALL alignent la semantique du point avec notre alphabet.
      * @return 250 expressions bornées, avec 20 textes chacune
      */
     @TestFactory
@@ -56,7 +56,7 @@ class DFAPropertyTest {
                 Pattern reference = Pattern.compile(example.expression(), Pattern.DOTALL);
                 DFATest.assertDeterministic(dfa);
                 for (int trial = 0; trial < 20; trial++) {
-                    String word = SearchGenerators.text(random, 10, "abxé\n\0");
+                    String word = SearchGenerators.text(random, 10, "abx\u0080\u00ff\n\0");
                     boolean expected = reference.matcher(word).matches();
                     String message = "graine=" + seed + ", essai=" + trial + ", regex=" + example.expression();
                     assertEquals(expected, SearchGenerators.accepts(nfa, word), message + " (NFA)");

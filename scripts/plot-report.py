@@ -56,7 +56,15 @@ def main():
     def save(fig, name, keys):
         fig.text(.01,.008,note,fontsize=8,color='#526477')
         metadata={'Title':name,'Description':json.dumps({k:case(k)['regex'] for k in keys},ensure_ascii=False)}
-        fig.savefig(args.output/f'{name}.svg',bbox_inches='tight',metadata={**metadata,'Date':manifest['finished_utc']})
+        svg = args.output/f'{name}.svg'
+        fig.savefig(svg,bbox_inches='tight',metadata={**metadata,'Date':manifest['finished_utc']})
+        # L'alphabet du moteur ne dépend d'aucun encodage de texte. La déclaration XML
+        # générée par Matplotlib est inutile pour nos SVG ASCII et est retirée avant hachage.
+        raw = svg.read_bytes()
+        if raw.startswith(b'<?xml '):
+            newline = raw.find(b'\n')
+            if newline >= 0:
+                svg.write_bytes(raw[newline + 1:])
         fig.savefig(args.output/f'{name}.png',bbox_inches='tight',dpi=145,metadata=metadata)
         plt.close(fig)
 

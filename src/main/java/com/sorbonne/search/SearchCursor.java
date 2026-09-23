@@ -1,33 +1,36 @@
 package com.sorbonne.search;
 
-/** État mutable d'une recherche en flux, privé à une ligne ou à un lecteur. */
+/** Etat mutable d'une recherche en flux, prive a une ligne ou a un lecteur. */
 public interface SearchCursor {
-    /** Consomme un char ; une correspondance trouvée reste acquise jusqu'au reset. */
-    boolean accept(char symbol);
+    /** Consomme une valeur de l'alphabet 8 bits, comprise entre 0 et 255. */
+    boolean accept(int symbol);
 
     /**
-     * Consomme un segment dont tous les octets représentent directement des
-     * caractères ASCII. Le chargeur UTF-8 utilise ce chemin pour éviter le
-     * décodage UTF-8 → UTF-16 et l'appel virtuel par caractère sur les corpus
-     * majoritairement ASCII.
+     * Consomme un segment d'octets sans conversion intermediaire.
      *
-     * @param buffer tampon d'octets
-     * @param offset première case à consommer
-     * @param length nombre d'octets ASCII à consommer
-     * @return vrai si une correspondance est acquise après ce segment
+     * @param buffer tampon source
+     * @param offset premiere case a consommer
+     * @param length nombre d'octets a consommer
+     * @return vrai si une correspondance est acquise apres ce segment
      */
-    default boolean acceptAscii(byte[] buffer, int offset, int length) {
+    default boolean accept(byte[] buffer, int offset, int length) {
+        if (buffer == null) {
+            throw new NullPointerException("Le tampon ne doit pas etre nul");
+        }
+        if (offset < 0 || length < 0 || offset > buffer.length - length) {
+            throw new IndexOutOfBoundsException("Segment d'octets invalide");
+        }
         for (int i = offset, end = offset + length; i < end; i++) {
-            if (accept((char) (buffer[i] & 0x7f))) {
+            if (accept(buffer[i] & 0xff)) {
                 return true;
             }
         }
         return matches();
     }
 
-    /** Inclut la correspondance vide avant la lecture du premier caractère. */
+    /** Inclut la correspondance vide avant la lecture du premier symbole. */
     boolean matches();
 
-    /** Repart au début d'une nouvelle ligne sans reconstruire le moteur. */
+    /** Repart au debut d'une nouvelle ligne sans reconstruire le moteur. */
     void reset();
 }

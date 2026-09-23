@@ -18,7 +18,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
-from compare_egrep import find_grep, prepare_corpus, run_count, utf8_locale, validate_expression
+from compare_egrep import find_grep, prepare_corpus, run_count, validate_expression
 from report_campaign import prepare_scaled_corpora, sha256_file
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -127,7 +127,7 @@ def sanitized_environment():
     for name in ("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS", "JAVA_OPTIONS", "CLASSPATH",
                  "GREP_OPTIONS", "GREP_COLORS", "POSIXLY_CORRECT"):
         environment.pop(name, None)
-    environment.update(LC_ALL=utf8_locale(), PYTHONHASHSEED="0", PYTHONDONTWRITEBYTECODE="1")
+    environment.update(LC_ALL="C", PYTHONHASHSEED="0", PYTHONDONTWRITEBYTECODE="1")
     return environment
 
 
@@ -163,9 +163,12 @@ def prepare_inputs(work, profile):
     paths = {f"book-{factor}": path for factor, path in scaled.items()}
     paths["synthetic"] = folder / "synthetic.txt"
     length = profile["synthetic"]["prefix_length"]
-    block = ("a" * (length - 1) + "b\n" + "a" * length + "c\n"
-             + "ab" * (length // 2) + "ac\n" + "x" * length + "\n" + "é" * 32 + "été\n")
-    with paths["synthetic"].open("w", encoding="utf-8", newline="\n") as stream:
+    block = ((b"a" * (length - 1) + b"b\n")
+             + (b"a" * length + b"c\n")
+             + (b"ab" * (length // 2) + b"ac\n")
+             + (b"x" * length + b"\n")
+             + (bytes(range(128, 256)) + b"\n"))
+    with paths["synthetic"].open("wb") as stream:
         for _ in range(profile["synthetic"]["blocks"]):
             stream.write(block)
     metadata = {key: {"bytes": path.stat().st_size, "sha256": sha256_file(path), "lines": count_lines(path)}
@@ -367,7 +370,7 @@ def report_markdown(manifest, cli_summary, jvm_summary):
     lines += ["", "## JVM échauffées", "",
               "5 JVM distinctes par cas ; 10 prépassages puis 10 mesures par JVM. Chaque mesure reconstruit le motif et lit le fichier.",
               "Les statistiques sont calculées sur les **5 moyennes de forks**, pas sur 50 répétitions prétendument indépendantes.",
-              "Le parcours inclut le décodage et les IO ; il ne mesure pas seulement les transitions en mémoire.", "",
+              "Le parcours inclut la lecture du fichier et les IO ; il ne mesure pas seulement les transitions en mémoire.", "",
               "| Cas et regex exécutée | Préparation, médiane des forks ms | Parcours, médiane des forks ms | Total, médiane des forks ms |",
               "| :--- | ---: | ---: | ---: |"]
     lookup_jvm = {(row["case_id"], row["metric"]): row for row in jvm_summary}
@@ -680,10 +683,10 @@ def execute(cache, purge=False, allow_dirty=False):
     for case in profile["experiments"]:
         common = [str(paths[case["corpus"]]), case["regex"], case["strategy"]]
         check_commands = {"java": java_prefix + ["com.sorbonne.Main", "--print", *common],
-                          "grep": [grep, "--color=never", "-E", "-n", "--", case["regex"], common[0]]}
+                          "grep": [grep, "-a", "--color=never", "-E", "-n", "--", case["regex"], common[0]]}
         validation[case["id"]] = validate_case(work, case, check_commands, environment, profile["cli"]["timeout_seconds"])
         commands[case["id"]] = {"java": java_prefix + ["com.sorbonne.Main", "--count", *common],
-                                 "grep": [grep, "-E", "-c", "--", case["regex"], common[0]]}
+                                 "grep": [grep, "-a", "-E", "-c", "--", case["regex"], common[0]]}
     expected = {key: value["matching_lines"] for key, value in validation.items()}
     print("3/7 Profil structurel NFA/DFA/DFAM hors chronométrage", flush=True)
     automata_rows = collect_automata(profile, java_prefix, environment, destination)

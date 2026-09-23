@@ -122,12 +122,8 @@ class RegexParserTest {
 	 * conservée comme une feuille littérale.</p>
 	 */
 	@Test
-	void preservesTrailingEscapeCharacter() throws Exception {
-		SyntaxTree tree = RegexParser.parse("a\\");
-
-		assertEquals(NodeType.CONCATENATION, tree.getNodeType());
-		assertEquals("a", tree.getLeft().getLetter());
-		assertEquals("\\", tree.getRight().getLetter());
+	void rejectsTrailingEscapeCharacter() {
+		assertThrows(IllegalArgumentException.class, () -> RegexParser.parse("a\\"));
 	}
 
 	/**
@@ -149,6 +145,19 @@ class RegexParserTest {
 	 * et parenthèses non équilibrées. Résultat attendu : chaque expression est
 	 * signalée comme syntaxiquement invalide.</p>
 	 */
+	@Test
+	void rejectsSymbolsOutsideTheSupportedRegexSubset() {
+		assertAll(
+			() -> assertThrows(IllegalArgumentException.class, () -> RegexParser.parse("é")),
+			() -> assertThrows(IllegalArgumentException.class, () -> RegexParser.parse("a+")),
+			() -> assertThrows(IllegalArgumentException.class, () -> RegexParser.parse("a?")),
+			() -> assertThrows(IllegalArgumentException.class, () -> RegexParser.parse("[ab]")),
+			() -> assertThrows(IllegalArgumentException.class, () -> RegexParser.parse("a{2}")),
+			() -> assertThrows(IllegalArgumentException.class, () -> RegexParser.parse("^a$")),
+			() -> assertThrows(IllegalArgumentException.class, () -> RegexParser.parse("\\+"))
+		);
+	}
+
 	@Test
 	void rejectsMalformedExpressions() {
 		assertAll(

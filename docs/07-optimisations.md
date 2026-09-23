@@ -1,67 +1,70 @@
-# Optimisations du chemin chaud — 23 septembre 2026
+[← Perspectives](06-perspectives.md) · [Accueil](../README.md)
 
-La minimisation est maintenant accessible par `DFAM.minimize`, qui délègue à l'implémentation de Hopcroft. Les mesures ont surtout montré un autre fait : **réduire le nombre d'états ne réduit pas automatiquement le nombre de transitions exécutées pendant le scan**. DFA et DFAM consomment toujours un symbole après l'autre ; si une transition est déjà un accès O(1), Hopcroft améliore principalement la taille de l'index et son comportement cache, pas la complexité asymptotique du parcours.
+# 07 — Optimisations du chemin chaud
 
-L'optimisation a donc été déplacée vers les opérations exécutées pour chaque caractère du fichier.
+Le profilage a montré que la minimisation réduit parfois fortement la taille du graphe sans réduire le nombre de symboles à lire. Le travail de performance porte donc d’abord sur la **boucle exécutée pour chaque octet du fichier**. Le sujet imposant des motifs ASCII, le moteur de production utilise désormais un alphabet fixe de **256 valeurs** et lit les fichiers directement sous forme de `byte[]`.
 
-| Étape | Avant | Maintenant | But |
+## 1. Décisions appliquées
+
+| Zone | Représentation précédente | Représentation actuelle | Effet recherché |
 | :--- | :--- | :--- | :--- |
-| Index DFA | classes paginées + pages de transitions | table plate `state × classe` lorsque sa taille reste bornée | supprimer les indirections du chemin chaud |
-| ASCII | classification UTF-16 puis transition | table directe `state × 128` | une lecture de table par octet ASCII |
-| Gros DFA | même structure paginée | repli paginé conservé au-delà d'un budget mémoire | ne pas échanger la vitesse contre un risque mémoire non borné |
-| Lecture `--count` | `InputStreamReader` UTF-8 → `char[]` | scan UTF-8 strict directement sur `byte[]` | éviter le décodage/copie des longues plages ASCII |
-| UTF-8 non ASCII | décodeur standard | décodeur strict intégré, émission des mêmes unités UTF-16 | garder exactement la sémantique du moteur |
-| KMP en fichier | appel `accept(char)` répété | traitement par plage ASCII avec copie `byte[]` du motif ASCII | amortir les appels et les conversions du curseur |
-| États acceptants | tableau `finals[]` interrogé après transition | sentinelle interne `MATCH` | supprimer un accès mémoire par symbole |
+| Alphabet de scan | domaine plus large que nécessaire | `0..255` | modèle conforme au besoin et borné |
+| Transition DFA | classification puis plusieurs indirections | `delta[(state << 8) | symbol]` | une adresse de table dans le cas courant |
+| Lecture fichier | transformation avant le matching | blocs `byte[65536]` | supprimer les conversions du chemin chaud |
+| KMP | comparaison caractère par caractère | motif `byte[]` + traitement de bloc | réduire les appels de curseur |
+| `--print` | reconstruction textuelle de la ligne | conservation des octets de la ligne courante | restituer exactement le contenu lu |
+| Très grand DFA | table directe potentiellement coûteuse | repli par classes d’équivalence | borner la mémoire |
 
-## Pourquoi DFAM n'était pas plus rapide
+Le moteur garde la même sémantique de recherche par ligne : LF, CR et CRLF sont des séparateurs ; toute autre valeur est un symbole ordinaire. Le point `.` consomme exactement un octet.
 
-Pour un texte de longueur $n$, DFA comme DFAM exécutent au plus une transition par unité consommée :
+## 2. Table directe `état × 256`
 
-$$
-T_{scan}=\Theta(n).
-$$
+Pour les automates usuels, `NativeSearch` prépare un tableau plat d’entiers. Avec `q` états, sa taille est :
 
-Passer, par exemple, de 159 à 101 états peut réduire la mémoire de la table, mais ne transforme pas $n$ transitions en 101 transitions. Pour une invocation unique, DFAM paie en plus la minimisation :
+\[
+4 \times 256 \times q\;\text{octets}.
+\]
 
-$$
-T_{DFAM}=T_{DFA}+T_{Hopcroft}+T_{scan,min}.
-$$
+Un DFA de 159 états demande ainsi environ 159 Kio ; un DFA de 1 026 états reste proche de 1 Mio. À cette échelle, privilégier une table contiguë est plus intéressant que multiplier les structures de pointeurs. La transition chaude devient :
 
-Il ne gagne donc au total que si l'amélioration du scan amortit `T_Hopcroft`, ce qui dépend de la réduction structurelle, du volume de texte et du nombre de fichiers parcourus avec le même motif. C'est une conclusion expérimentale importante : **minimal en nombre d'états ne signifie pas minimal en temps CPU**.
+```java
+state = delta[(state << 8) | (buffer[i] & 0xff)];
+```
 
-## Fast path UTF-8/ASCII
+Les états finaux sont encodés par un marqueur interne : dès qu’une occurrence est trouvée, le curseur cesse de faire travailler l’automate jusqu’à la fin de la ligne.
 
-Le sous-ensemble du projet utilise des motifs ASCII, tandis que les corpus Gutenberg restent UTF-8. Dans le chemin `--count`, `FileLoader` lit maintenant des blocs d'octets. Une plage dont tous les octets sont ASCII est envoyée directement au curseur via `acceptAscii`; aucun `String` ni `char[]` intermédiaire n'est créé. Lorsqu'un octet multioctet apparaît, le décodeur intégré vérifie les séquences surlongues, substituts UTF-16, code points hors plage et séquences tronquées, puis produit exactement une ou deux unités UTF-16 comme auparavant.
+Au-delà de 16 millions de cellules, soit 64 Mio pour la table, `NativeSearch` bascule sur une table compacte par classes. Ce cas protège la mémoire sans pénaliser les DFA ordinaires du protocole.
 
-Les séparateurs LF, CR et CRLF gardent le même comportement, y compris à la frontière de deux blocs. Le fichier entier est encore validé après une correspondance : une séquence UTF-8 invalide en fin de fichier reste une erreur.
+## 3. Lecture binaire et traitement par blocs
 
-## Mesure diagnostique avant/après
+`FileLoader` utilise un tampon de 64 Kio et transmet au moteur des plages contiguës d’octets. Le curseur DFA et le curseur KMP possèdent tous deux une méthode de traitement de bloc ; l’appel virtuel n’est donc pas répété pour chaque symbole.
 
-La table suivante est un **diagnostic local**, pas le résultat de la campagne officielle. Même JDK 21, même machine, mêmes options JVM et même corpus répété ×32 ; le nombre indiqué est le temps moyen de `scanNanos` après échauffement dans une JVM. Il sert uniquement à vérifier que l'optimisation cible bien le goulot identifié.
+Le mode `--count` ne conserve aucune ligne complète. Le mode `--print` alloue seulement la ligne en cours, car il doit pouvoir la restituer lorsqu’une correspondance est trouvée. Une occurrence peut traverser une frontière de tampon : l’état du DFA ou l’indice KMP est conservé entre deux blocs et n’est réinitialisé qu’à la frontière de ligne.
 
-| Cas ×32 | Ancien scan | Nouveau scan | Accélération approximative |
-| :--- | ---: | ---: | ---: |
-| `Elizabeth` · KMP | 126.5 ms | 39.6 ms | ×3.2 |
-| `Elizabeth` · DFA | 181.1 ms | 75.8 ms | ×2.4 |
-| `Elizabeth` · DFAM | 171.2 ms | 74.1 ms | ×2.3 |
-| regex complexe · DFA | 165.4 ms | 72.5 ms | ×2.3 |
-| regex complexe · DFAM | 184.2 ms | 76.8 ms | ×2.4 |
+## 4. KMP reste le fast path littéral
 
-Ces nombres ne doivent pas remplacer `docs/assets/benchmark.json`. Après intégration du patch dans un commit propre, `./scripts/report-campaign.sh` doit être relancé : il recalculera les CSV, les statistiques, les figures et les hashes avec le code final.
+Un motif littéral ASCII est converti une seule fois en `byte[]`, puis sa table LPS est construite en `O(m)`. Le scan du fichier est `O(n)` et n’effectue aucune conversion de symbole. Le chemin KMP reste utile comme témoin algorithmique et comme stratégie automatique pour une concaténation pure.
 
-## Vérifications effectuées sur ce changement
+## 5. Pourquoi DFAM n’est pas automatiquement plus rapide
 
-- compilation Java 21 avec `javac --release 21 -Xlint:all` et `ant clean jar` ;
-- **24/24 tests Python** du protocole expérimental ;
-- comparaison exacte `--print` contre `grep -E -n` sur les **13 cas book-1** du profil (KMP, DFA et DFAM) ;
-- comparaison des comptes sur le corpus ×32 pour le littéral et la regex complexe ;
-- contrôle spécifique du fast path UTF-8 : caractères BMP, emoji coupé à une frontière de bloc, CR/LF/CRLF et plusieurs formes d'UTF-8 invalide.
+Hopcroft minimise le **nombre d’états**, pas le nombre d’octets à lire. Après préparation, DFA et DFAM exécutent tous deux une transition en temps constant pour chaque symbole tant qu’aucune occurrence n’a été trouvée. Réduire 159 états à 101 peut économiser de la mémoire sans changer sensiblement le temps du scan ; si un DFA passe de 1 026 à 1 025 états, le gain attendu pendant la lecture est presque nul alors que la minimisation a un coût de préparation mesurable.
 
-La suite complète JUnit doit néanmoins être relancée avec Maven dans l'environnement du dépôt après remplacement des fichiers ; Maven n'est pas disponible dans l'environnement utilisé pour cette optimisation.
+La campagne distingue donc explicitement :
 
-## Limites restantes face à GNU grep
+\[
+T_{\mathrm{DFA}},\quad T_{\mathrm{Hopcroft}},\quad T_{\mathrm{index}},\quad T_{\mathrm{scan}}.
+\]
 
-Cette optimisation réduit fortement le coût du moteur Java, mais elle ne supprime pas trois avantages structurels de GNU grep : coût de démarrage natif très faible, moteurs spécialisés pour les littéraux, et préfiltrage/stratégies hybrides avant le DFA général. Le projet reste volontairement centré sur KMP et les automates du cours. Ajouter Boyer–Moore/Aho–Corasick ou un filtre de littéraux obligatoires serait une **nouvelle stratégie algorithmique** qui devrait être documentée et mesurée séparément, pas dissimulée dans le chemin DFA.
+C’est une conclusion expérimentale importante : **minimal en états ne signifie pas minimal en temps d’exécution**.
+
+## 6. Protocole de comparaison
+
+Le comparateur normalise uniquement les séparateurs CRLF/CR vers LF, puis fournit la **même copie d’octets** à Java et à GNU grep. Le moteur de référence est lancé avec `grep -a -E` et `LC_ALL=C`. Le motif doit appartenir au sous-ensemble ASCII du projet ; aucune hypothèse textuelle supplémentaire n’est imposée au fichier.
+
+La validation précède toute mesure : les sorties `--print` et `grep -a -E -n` sont comparées octet par octet. Les tests couvrent notamment les 256 valeurs possibles, les frontières de tampon, NUL, CR/LF/CRLF et les occurrences coupées entre deux lectures.
+
+## 7. Limite restante face à GNU grep
+
+La réduction du coût par symbole rapproche le moteur d’une boucle DFA classique, mais GNU grep conserve des avantages d’implémentation et des stratégies spécialisées : coût de lancement natif faible, recherche littérale très optimisée et préfiltrage avant certains chemins généraux. Le projet reste volontairement centré sur les algorithmes étudiés — KMP, Thompson, déterminisation et Hopcroft — afin que les mesures restent interprétables.
 
 [← Perspectives](06-perspectives.md) · [Accueil](../README.md)

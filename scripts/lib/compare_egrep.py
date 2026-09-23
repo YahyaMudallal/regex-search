@@ -9,7 +9,6 @@ import argparse
 import csv
 import hashlib
 import json
-import locale
 import math
 import os
 from pathlib import Path
@@ -26,78 +25,78 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def validate_expression(expression):
-    """Accepte le sous-ensemble commun : lettres, concaténation, |, *, . et ().
-
-    Le contrôle itératif refuse les extensions grep absentes de RegexParser,
-    les opérandes vides, les étoiles répétées et les échappements ambigus.
-    Les caractères hors BMP sont exclus car Java travaille en unités UTF-16.
-    """
+    """Accepte le sous-ensemble commun du projet sur un motif ASCII."""
     if not expression:
         raise ValueError("Le parseur du projet refuse une expression vide.")
     depth, expects_atom, starred, escaped = 0, True, False, False
     for char in expression:
-        if char in "\r\n\0" or ord(char) > 0xFFFF:
-            raise ValueError("La regex doit tenir sur une ligne, sans NUL ni caractère hors BMP.")
+        if char in "\r\n\0" or ord(char) > 0x7f:
+            raise ValueError("La regex doit etre ASCII et tenir sur une seule ligne.")
         if escaped:
             if char not in ".*|()\\":
-                raise ValueError("Échappements communs autorisés : \\. \\* \\| \\( \\) et \\\\.")
+                raise ValueError("Echappements communs autorises : \\. \\* \\| \\( \\) et \\\\.")
             escaped, expects_atom, starred = False, False, False
         elif char == "\\":
             escaped = True
         elif char in "+?[]{}^$":
-            raise ValueError(f"Opérateur non pris en charge par le projet : {char!r}")
+            raise ValueError(f"Operateur non pris en charge par le projet : {char!r}")
         elif char == "(":
             depth += 1
             expects_atom, starred = True, False
         elif char == ")":
             if depth == 0 or expects_atom:
-                raise ValueError("Parenthèse incorrecte ou groupe vide.")
+                raise ValueError("Parenthese incorrecte ou groupe vide.")
             depth -= 1
             expects_atom, starred = False, False
         elif char == "|":
             if expects_atom:
-                raise ValueError("Une alternative doit avoir deux opérandes.")
+                raise ValueError("Une alternative doit avoir deux operandes.")
             expects_atom, starred = True, False
         elif char == "*":
             if expects_atom or starred:
-                raise ValueError("Une étoile doit suivre un opérande ; les étoiles répétées sont exclues.")
+                raise ValueError("Une etoile doit suivre un operande ; les etoiles repetees sont exclues.")
             starred = True
         else:
             expects_atom, starred = False, False
     if escaped or depth or expects_atom:
-        raise ValueError("Expression incomplète ou parenthèses déséquilibrées.")
+        raise ValueError("Expression incomplete ou parentheses desequilibrees.")
 
 
 def prepare_corpus(source, destination):
-    """Copie par blocs le texte UTF-8 en normalisant CRLF/CR vers LF, hors mesure.
-
-    Un même instantané est ensuite lu par les deux processus. Les octets NUL
-    et caractères hors BMP sont exclus du protocole commun. Le hash permet
-    d'identifier exactement le corpus mesuré, même après suppression de la copie.
-    """
+    """Copie les octets et normalise CRLF/CR vers LF, hors mesure."""
     digest = hashlib.sha256()
     size = 0
-    with source.open("r", encoding="utf-8", newline=None) as reader, destination.open("wb") as writer:
+    pending_cr = False
+    with source.open("rb") as reader, destination.open("wb") as writer:
         while chunk := reader.read(64 * 1024):
-            if "\0" in chunk or any(ord(char) > 0xFFFF for char in chunk):
-                raise ValueError("Comparaison limitée aux textes UTF-8 sans NUL ni caractère hors BMP.")
-            data = chunk.encode("utf-8")
-            writer.write(data)
-            digest.update(data)
-            size += len(data)
-    return {"bytes": size, "sha256": digest.hexdigest(), "normalization": "UTF-8, CRLF/CR -> LF"}
-
-
-def utf8_locale():
-    """Trouve une locale UTF-8 réellement installée, pour le point universel de grep."""
-    for candidate in ("C.UTF-8", "C.utf8", "en_US.UTF-8", "en_US.utf8", ""):
-        try:
-            chosen = locale.setlocale(locale.LC_CTYPE, candidate)
-            if locale.nl_langinfo(locale.CODESET).lower().replace("-", "") == "utf8":
-                return chosen
-        except locale.Error:
-            pass
-    raise ValueError("Une locale UTF-8 est nécessaire ; consulter locale -a.")
+            output = bytearray()
+            index = 0
+            if pending_cr:
+                output.append(0x0A)
+                if chunk and chunk[0] == 0x0A:
+                    index = 1
+                pending_cr = False
+            while index < len(chunk):
+                value = chunk[index]
+                if value == 0x0D:
+                    if index + 1 < len(chunk):
+                        output.append(0x0A)
+                        if chunk[index + 1] == 0x0A:
+                            index += 1
+                    else:
+                        pending_cr = True
+                else:
+                    output.append(value)
+                index += 1
+            if output:
+                writer.write(output)
+                digest.update(output)
+                size += len(output)
+        if pending_cr:
+            writer.write(b"\n")
+            digest.update(b"\n")
+            size += 1
+    return {"bytes": size, "sha256": digest.hexdigest(), "normalization": "octets, CRLF/CR -> LF"}
 
 
 def find_grep(requested):
@@ -124,7 +123,7 @@ def run_count(command, environment, timeout, grep=False):
     output = completed.stdout.strip()
     accepted = (0, 1) if grep else (0,)
     if completed.returncode not in accepted or not output.isdigit():
-        detail = completed.stderr.decode("utf-8", errors="replace").strip()
+        detail = completed.stderr.decode(errors="replace").strip()
         raise ValueError(f"Échec de {command[0]} (statut {completed.returncode}) : {detail or output!r}")
     count = int(output)
     if grep and (completed.returncode == 1) != (count == 0):
@@ -144,7 +143,7 @@ def parse_args():
     """Décrit les paramètres du protocole, avec des valeurs par défaut reproductibles."""
     parser = argparse.ArgumentParser(prog="scripts/compare-egrep.sh", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("file", type=Path, help="fichier texte UTF-8, relatif au répertoire courant")
+    parser.add_argument("file", type=Path, help="fichier a parcourir, relatif au repertoire courant")
     parser.add_argument("regex", help="regex commune au projet et à grep, à protéger avec des guillemets")
     parser.add_argument("--strategy", choices=("AUTO", "KMP", "DFA", "DFAM", "AUTOMATON"), default="AUTO")
     parser.add_argument("--runs", type=positive_int, default=10, help="mesures par moteur (défaut : 10)")
@@ -168,7 +167,7 @@ def main():
         raise ValueError("Le chemin doit désigner un fichier ordinaire.")
     grep, grep_version = find_grep(args.grep)
     environment = os.environ.copy()
-    environment["LC_ALL"] = utf8_locale()
+    environment["LC_ALL"] = "C"
     for name in ("GREP_OPTIONS", "GREP_COLORS", "POSIXLY_CORRECT"):
         environment.pop(name, None)
     java = str(Path(environment["JAVA_HOME"]) / "bin/java")
@@ -185,9 +184,9 @@ def main():
         commands = {
             "java": [java, "-cp", str(PROJECT_ROOT / "target/classes"), "com.sorbonne.Main",
                      "--count", str(corpus), args.regex, args.strategy],
-            "grep": [grep, "-E", "-c", "--", args.regex, str(corpus)],
+            "grep": [grep, "-a", "-E", "-c", "--", args.regex, str(corpus)],
         }
-        print(f"Source : {source}\nCorpus commun : {corpus_info['bytes']} octets, UTF-8 / LF", flush=True)
+        print(f"Source : {source}\nCorpus commun : {corpus_info['bytes']} octets / LF", flush=True)
         print(f"Référence : {grep_version} | locale : {environment['LC_ALL']}", flush=True)
         print("Mesure de processus complets : démarrage JVM, préparation, IO et comptage inclus.", flush=True)
         print("Passages préalables : cache de fichiers sollicité ; chaque JVM redémarre.", flush=True)

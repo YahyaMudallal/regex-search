@@ -24,7 +24,7 @@ Les sections 10.2–10.4 présentent les automates et la construction des sous-e
 Ces ressources donnent une référence indépendante sur KMP. Leur code est une variante de présentation ; la table LPS du projet et ses coûts sont expliqués à partir de l’implémentation locale, pas présentés comme une copie de cette variante.
 
 **GNU Project — manuel GNU grep.**  
-[Usage et relation entre egrep et grep -E](https://www.gnu.org/s/grep/manual/html_node/Usage.html) · [Performance](https://www.gnu.org/s/grep/manual/html_node/Performance.html) · [Encodage des caractères](https://www.gnu.org/software/grep/manual/html_node/Character-Encoding.html).
+[Usage et relation entre egrep et grep -E](https://www.gnu.org/s/grep/manual/html_node/Usage.html) · [Performance](https://www.gnu.org/s/grep/manual/html_node/Performance.html).
 
 Ces pages motivent l’usage de `grep -E`, le contrôle de la locale et la prudence sur les algorithmes internes utilisés selon le motif. La version réellement exécutée pendant les expériences est enregistrée dans les métadonnées.
 

@@ -28,6 +28,8 @@ import java.util.Set;
  * Un DFA équivalent peut nécessiter un nombre exponentiel d'états.</p>
  */
 public final class DFA {
+    private static final int ALPHABET_SIZE = 256;
+
     private DFA() {
     }
 
@@ -82,7 +84,7 @@ public final class DFA {
             Alphabet alphabet = input.alphabet(current.subset());
             List<Character> representatives = new ArrayList<>(alphabet.explicit());
             if (searching || alphabet.any()) {
-                for (int code = Character.MIN_VALUE; code <= Character.MAX_VALUE; code++) {
+                for (int code = 0; code < ALPHABET_SIZE; code++) {
                     if (!alphabet.explicit().contains((char) code)) {
                         representatives.add((char) code);
                         break;
@@ -168,10 +170,14 @@ public final class DFA {
                     case EPSILON -> row.epsilon.add(destination);
                     case CHARACTER -> {
                         char symbol = transition.getSymbol();
+                        requireByteSymbol(symbol);
                         row.characters.computeIfAbsent(symbol, key -> new ArrayList<>()).add(destination);
                     }
                     case ANY -> {
                         Set<Character> excluded = transition.getExcludedSymbols();
+                        for (char symbol : excluded) {
+                            requireByteSymbol(symbol);
+                        }
                         row.others.add(new Wildcard(destination, excluded));
                     }
                 }
@@ -190,6 +196,12 @@ public final class DFA {
                 }
             }
             return new Alphabet(explicit, any);
+        }
+
+        private static void requireByteSymbol(char symbol) {
+            if (symbol >= ALPHABET_SIZE) {
+                throw new IllegalArgumentException("Symbole hors alphabet 8 bits : " + (int) symbol);
+            }
         }
 
         private BitSet move(BitSet current, char symbol) {

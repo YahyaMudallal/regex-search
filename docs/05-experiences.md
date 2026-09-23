@@ -2,7 +2,7 @@
 
 # 05 — Comparaison DFA, DFAM, KMP et egrep
 
-Le profil [`report-v4-dfa-dfam-kmp-grep`](../scripts/report-profile.json) mesure le code optimisé avec Hopcroft. Le [rapport chiffré](assets/benchmark.md) compare les moteurs côte à côte ; le [manifeste](assets/benchmark.json) conserve les versions, paramètres, empreintes, tailles et statistiques. Les mesures sont locales à cette machine et ne constituent pas une preuve asymptotique.
+Le profil [`report-v5-byte-alphabet`](../scripts/report-profile.json) mesure le code optimisé avec Hopcroft. Le [rapport chiffré](assets/benchmark.md) compare les moteurs côte à côte ; le [manifeste](assets/benchmark.json) conserve les versions, paramètres, empreintes, tailles et statistiques. Les mesures sont locales à cette machine et ne constituent pas une preuve asymptotique.
 
 ## 1. Comparer le même travail
 
@@ -12,7 +12,7 @@ La comparaison à quatre moteurs porte sur `Elizabeth` (livre ×1/×8/×32) et `
 
 ## 2. Paramètres fixes et regex exactes
 
-- Java 21, `-Xms64m -Xmx512m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -Dfile.encoding=UTF-8`.
+- Java 21, `-Xms64m -Xmx512m -XX:+UseSerialGC -XX:ActiveProcessorCount=1`.
 - Graine CLI `20260923`, JVM `20260924`.
 - 32 cas Java, dont 30 cas CLI. Trois prépassages puis cinq blocs de six paires Java/grep : 30 processus mesurés par moteur et cas CLI.
 - Cinq JVM par cas, chacune avec dix prépassages puis dix mesures ; chaque invocation reconstruit le motif et lit le fichier.
@@ -36,11 +36,11 @@ La comparaison à quatre moteurs porte sur `Elizabeth` (livre ×1/×8/×32) et `
 | growth-7 | `(a\|b)*a(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)b` | synthetic | DFA, DFAM |
 | growth-9 | `(a\|b)*a(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)(a\|b)b` | synthetic | DFA, DFAM |
 
-Les cas `growth-9` sont réservés aux JVM échauffées, pour les **deux** stratégies DFA et DFAM. Le livre est la copie `Samples/PrideAndPrejudice.txt`, notices incluses, normalisée en UTF-8/LF puis répétée ×8 et ×32. Son empreinte est fixée dans le profil. Le corpus synthétique contient 2 048 répétitions de cinq lignes : 127 `a` puis `b` ; 128 `a` puis `c` ; 64 copies de `ab` puis `ac` ; 128 `x` ; 32 `é` puis `été`. Chaque ligne se termine par LF.
+Les cas `growth-9` sont réservés aux JVM échauffées, pour les **deux** stratégies DFA et DFAM. Le livre est la copie binaire `Samples/PrideAndPrejudice.txt`, notices incluses ; seules les fins de ligne CRLF/CR sont normalisées vers LF avant de créer les variantes ×8 et ×32. Son empreinte est fixée dans le profil. Le corpus synthétique contient 2 048 répétitions de cinq lignes : 127 `a` puis `b` ; 128 `a` puis `c` ; 64 copies de `ab` puis `ac` ; 128 `x` ; enfin la suite brute des valeurs `128..255`. Chaque ligne se termine par LF.
 
 ## 3. Contrôles et unité statistique
 
-Avant de chronométrer, la campagne exécute les tests et compare pour les 32 cas les sorties complètes `Main --print` et `grep -E -n`, octet par octet : mêmes numéros et contenus, pas seulement les mêmes comptes. Les comptes sont revérifiés à chaque invocation. Les textes invalides, NUL ou hors BMP sont exclus du protocole commun. Une différence, une erreur ou un délai dépassé arrête la campagne.
+Avant de chronométrer, la campagne exécute les tests et compare pour les 32 cas les sorties complètes `Main --print` et `grep -E -n`, octet par octet : mêmes numéros et contenus, pas seulement les mêmes comptes. Les comptes sont revérifiés à chaque invocation. Le motif est ASCII ; le corpus peut contenir n’importe quelle valeur d’octet. GNU grep est lancé avec `-a` et `LC_ALL=C` pour adopter la même sémantique à un octet. Une différence, une erreur ou un délai dépassé arrête la campagne.
 
 Pour chaque bloc CLI, l’ordre des cas est mélangé. Chaque cas comporte trois paires Java puis grep et trois paires grep puis Java, dans un ordre mélangé. Les durées incluent démarrage JVM, préparation, lecture, recherche et sortie du compteur. Les prépassages CLI sollicitent le cache disque, sans conserver le JIT entre processus. La série grep affichée pour une comparaison est celle du **cas DFA** associé ; les autres séries grep restent dans les CSV, sans mélange opportuniste.
 

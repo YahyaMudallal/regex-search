@@ -34,7 +34,7 @@ Un automate correct pour la première opération n’est donc pas, à lui seul, 
 
 ## 2. Le périmètre des expressions
 
-Le [sujet](../src/main/java/com/sorbonne/specifications/daar_projet1.pdf) retient un sous-ensemble des ERE : lettres ASCII, concaténation, alternative, étoile, parenthèses et point universel. L’implémentation Java manipule plus généralement des unités UTF-16 ; cela ne signifie pas qu’elle implémente toute la norme ERE ni une sémantique Unicode par point de code.
+Le [sujet](../src/main/java/com/sorbonne/specifications/daar_projet1.pdf) retient un sous-ensemble des ERE : lettres ASCII, concaténation, alternative, étoile, parenthèses et point universel. Nous fixons donc explicitement l'alphabet d'exécution à $\Sigma=\{0,\ldots,255\}$ : le motif est ASCII, tandis que le fichier est parcouru comme une suite d'octets. Cette décision rend la sémantique du point simple et précise : `.` consomme exactement un octet.
 
 | Construction | Exemple | Sens |
 | :--- | :--- | :--- |
@@ -102,9 +102,9 @@ Deux états ayant le même nom sont deux états distincts. `State` conserve l’
 
 Trois types sont distingués :
 
-- `CHARACTER` consomme un `char` précis ;
+- `CHARACTER` consomme une valeur précise de `0` à `255` ;
 - `EPSILON` ne consomme aucun caractère ;
-- `ANY` consomme un `char`, sauf les caractères éventuellement exclus.
+- `ANY` consomme n’importe quelle valeur de `0` à `255`, sauf les symboles éventuellement exclus.
 
 Le point littéral et le point universel n’ont pas la même représentation. Les exclusions d’un arc `ANY` servent à construire des classes de caractères disjointes dans le DFA. Elles ne constituent pas une implémentation de la syntaxe ERE des classes `[ ... ]`.
 
@@ -129,7 +129,7 @@ La table LPS de KMP n’est pas reconstruite entre ces deux appels. `NativeSearc
 
 ## 5. Entrées-sorties et mémoire
 
-Deux chemins d’entrée-sortie coexistent volontairement. `FileLoader.open` fournit le chemin lisible du mode `--print` : décodeur UTF-8 strict et `BufferedReader` de **65 536 caractères**. Le comptage, qui constitue le chemin mesuré, utilise directement un tampon de **65 536 octets** et un décodeur UTF-8 strict intégré au scan. Les plages ASCII sont transmises au moteur sans matérialiser un `char[]`; seules les séquences multioctets sont converties en unités UTF-16. Un encodage invalide déclenche toujours une erreur, y compris après qu'une correspondance a déjà été trouvée.
+`FileLoader` possède désormais un seul modèle d’entrée-sortie : des blocs de **65 536 octets** lus directement depuis le fichier. Il n’existe aucune phase de décodage dans le chemin de recherche. Le mode `--count` transmet ces blocs au curseur préparé ; le mode `--print` conserve seulement les octets de la ligne courante afin de les restituer tels quels lorsqu’elle correspond. LF, CR et CRLF délimitent les lignes ; toutes les autres valeurs d’octet appartiennent au contenu.
 
 La taille du tampon reste un compromis de mise en œuvre, **pas une valeur démontrée optimale**. Le comptage conserve seulement le tampon et l’état du moteur, sans allocation d’une chaîne par ligne ; sa mémoire de parcours est donc indépendante de la longueur d’une ligne. Le mode d’affichage utilise encore `readLine()` car il doit restituer la ligne complète.
 

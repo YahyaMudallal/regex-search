@@ -94,7 +94,7 @@ class BenchmarkTest {
     }
 
     // ====================================================================
-    // CAS INTERMÉDIAIRES — ENCODAGE ET LIMITES DU PARCOURS
+    // CAS INTERMÉDIAIRES — OCTETS ET LIMITES DU PARCOURS
     // ====================================================================
 
     /**
@@ -112,7 +112,7 @@ class BenchmarkTest {
     }
 
     /**
-     * Fournit les principales combinaisons de séparateurs reconnues par BufferedReader.
+     * Fournit les principales combinaisons de séparateurs reconnues par le scanner binaire.
      * @return texte et nombre de lignes attendues
      */
     private static Stream<Arguments> lineCases() {
@@ -122,15 +122,23 @@ class BenchmarkTest {
     }
 
     /**
-     * Lit correctement les caractères multioctets, même autour d'une limite du tampon.
+     * Lit les octets de valeur haute autour d'une limite du tampon sans conversion.
      * @param strategy moteur à vérifier
      * @throws Exception si le pipeline échoue
      */
     @ParameterizedTest
     @EnumSource(Benchmark.Strategy.class)
-    void handlesLongUtf8Lines(Benchmark.Strategy strategy) throws Exception {
-        String content = "x".repeat(65_535) + "été😀" + "x".repeat(70_000) + "\néte\nété😀";
-        Benchmark.Result result = new Benchmark(write(content), "été😀", strategy).pipeline();
+    void handlesLongByteLines(Benchmark.Strategy strategy) throws Exception {
+        byte[] prefix = new byte[65_535];
+        java.util.Arrays.fill(prefix, (byte) 'x');
+        byte[] suffix = new byte[] {'n','e','e','d','l','e',(byte) 0xff,'x','\n',
+                (byte) 0x80,'n','e','e','d','l','e','\n','x'};
+        byte[] content = new byte[prefix.length + suffix.length];
+        System.arraycopy(prefix, 0, content, 0, prefix.length);
+        System.arraycopy(suffix, 0, content, prefix.length, suffix.length);
+        Path file = directory.resolve("bytes.txt");
+        Files.write(file, content);
+        Benchmark.Result result = new Benchmark(file, "needle", strategy).pipeline();
         assertEquals(3, result.totalLines());
         assertEquals(2, result.matchingLines());
     }
@@ -196,26 +204,25 @@ class BenchmarkTest {
         assertThrows(Exception.class, () -> new Benchmark(file, "").pipeline());
     }
 
-    /**
-     * Propage les erreurs de chemin et de décodage UTF-8 sans les transformer en zéro résultat.
-     * @throws IOException si la création du fichier invalide échoue
-     */
+    /** Propage les erreurs de chemin mais accepte toutes les valeurs d'octet. */
     @Test
-    void propagatesIoErrors() throws IOException {
+    void propagatesIoErrorsAndAcceptsAllBytes() throws Exception {
         assertThrows(IOException.class, () -> new Benchmark(directory.resolve("absent.txt"), "a").pipeline());
         assertThrows(IOException.class, () -> new Benchmark(directory, "a").pipeline());
-        Path malformed = directory.resolve("invalid.txt");
-        Files.write(malformed, new byte[] {'a', '\n', (byte) 0xc3, 0x28});
-        assertThrows(IOException.class, () -> new Benchmark(malformed, "a").pipeline());
+        Path binary = directory.resolve("bytes.bin");
+        Files.write(binary, new byte[] {'a', '\n', (byte) 0xc3, 0x28, (byte) 0xff});
+        Benchmark.Result result = new Benchmark(binary, ".", Benchmark.Strategy.DFA).pipeline();
+        assertEquals(2, result.totalLines());
+        assertEquals(2, result.matchingLines());
     }
 
     /**
      * Écrit le contenu exact sans ajouter de séparateur final.
-     * @param content texte à encoder en UTF-8
+     * @param content texte ASCII à écrire
      * @return chemin du fichier de test
      * @throws IOException si l'écriture échoue
      */
     private Path write(String content) throws IOException {
-        return Files.writeString(directory.resolve("sample.txt"), content, StandardCharsets.UTF_8);
+        return Files.writeString(directory.resolve("sample.txt"), content, StandardCharsets.US_ASCII);
     }
 }

@@ -32,15 +32,15 @@ Les générateurs limitent les longueurs, les alphabets et la profondeur des arb
 
 | Objet testé | Résultat de référence | Précaution |
 | :--- | :--- | :--- |
-| KMP | `String.contains` et propriétés d’insertion/extraction | Comparaison littérale en unités UTF-16 |
+| KMP | `String.contains` sur l’alphabet ASCII et propriétés d’insertion/extraction | Comparaison littérale octet par octet |
 | DFA | Simulation explicite du NFA avant conversion | Tester la reconnaissance d’un mot entier |
-| NFA et DFA issus d’un arbre | `Pattern.matcher(...).matches()` | Syntaxe commune, textes BMP et `DOTALL` |
+| NFA et DFA issus d’un arbre | `Pattern.matcher(...).matches()` | Syntaxe commune, symboles de valeur `0..255` et `DOTALL` |
 | NativeSearch | `Pattern.matcher(...).find()` | Chercher une occurrence, pas seulement reconnaître toute la chaîne |
 | NativeSearch sur petits graphes | Énumération des sous-chaînes puis simulation NFA | Oracle volontairement lent, réservé aux petites entrées |
 | Benchmark fichier | Nombre de lignes acceptées par l’oracle | Inclure lignes vides et séparateurs |
-| Commandes Java / grep | Comptage obtenu par GNU grep | Même copie du texte, même motif et locale compatible |
+| Commandes Java / grep | Comptage obtenu par GNU grep | Même copie d’octets, même motif ASCII et `LC_ALL=C` |
 
-`Pattern.DOTALL` est utilisé dans les tests en mémoire parce que notre transition universelle accepte aussi un `char` de saut de ligne. Dans le parcours des fichiers, les séparateurs sont retirés avant la recherche. Les tests contre `Pattern` se limitent au BMP lorsque le point intervient, afin de ne pas confondre unités UTF-16 et points de code supplémentaires.
+`Pattern.DOTALL` est utilisé uniquement comme oracle en mémoire : chaque symbole 8 bits est représenté par une valeur Java `char` comprise entre 0 et 255. Dans le parcours des fichiers, CR et LF sont des séparateurs de ligne et ne sont jamais transmis au moteur de motif. Les property tests vérifient donc le même alphabet fini que le chemin de production.
 
 Le moteur Java de référence est uniquement un **oracle de test**. Il ne remplace aucun des algorithmes de production.
 
@@ -76,9 +76,9 @@ Les tests de `Benchmark` écrivent de vrais fichiers dans des répertoires tempo
 - `a` puis `b` sur deux lignes, qui ne doivent pas produire une occurrence de `ab` ;
 - un fichier vide et un fichier contenant une ligne vide ;
 - les séparateurs LF, CRLF et CR, ainsi qu’une dernière ligne sans séparateur ;
-- une ligne dépassant le tampon de 64 K caractères, avec un motif multioctet près de sa limite ;
-- un fichier absent, un répertoire donné à la place d’un fichier et des octets UTF-8 invalides ;
-- le fast path `byte[]` du comptage, y compris emoji/UTF-8 multioctet à cheval sur 64 Kio et CRLF aux frontières ;
+- une ligne dépassant le tampon de 64 Kio, avec une occurrence coupée exactement à la frontière de deux blocs ;
+- un fichier absent, un répertoire donné à la place d’un fichier et des valeurs d’octet élevées (`128..255`) ;
+- le chemin `byte[]` du comptage, y compris les 256 valeurs possibles, NUL et CR/LF/CRLF aux frontières de blocs ;
 - deux appels successifs au même benchmark, dont les compteurs doivent repartir de zéro.
 
 Les durées sont vérifiées par leurs relations : valeurs non négatives, étapes non utilisées à zéro et total égal à préparation plus parcours. Aucun test ne suppose qu’une recherche doit finir en moins d’un nombre arbitraire de millisecondes. Les performances appartiennent au protocole expérimental, pas à une assertion sensible à la charge de la machine.
@@ -95,7 +95,7 @@ Trois tests Java de `Main` protègent le mode `--count` : sortie numérique seul
 
 Les tests de `DFAMHopcroftTest` vérifient les exemples et propriétés de minimisation, dont la conservation du langage et du comportement de recherche. Les tests du benchmark couvrent les chemins DFA sans minimisation, DFAM et le raccourci nullable. Les tests Python refusent aussi de comparer des moteurs sur des entrées différentes.
 
-La campagne fixe exécute les tests avant toute mesure : **4 140 tests Java et 24 tests Python**. Le journal est conservé localement dans `target/report/results/validation.txt`. Les tests Python supplémentaires protègent l'équilibrage des moteurs, le calcul par fork, les contrôles d'intégrité, le refus des observations dupliquées, la restauration après une publication interrompue et la conservation des assets lors du nettoyage.
+La campagne fixe exécute la suite Java complète et les tests Python du protocole avant toute mesure. Le journal est conservé localement dans `target/report/results/validation.txt`. Les tests Python supplémentaires protègent l'équilibrage des moteurs, le calcul par fork, les contrôles d'intégrité, le refus des observations dupliquées, la restauration après une publication interrompue et la conservation des assets lors du nettoyage.
 
 La version optimisée ajoute les longues expressions sans récursion, la comparaison du chemin NFA direct, les curseurs entre blocs, les numéros et contenus exacts des lignes et les corpus normalisés par blocs. Voir le [relevé des optimisations](07-optimisations.md).
 

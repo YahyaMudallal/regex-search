@@ -96,7 +96,7 @@ class DFAMHopcroftTest {
         State start = minimized.getInitialState();
         assertEquals(1, minimized.getOutgoingTransitions(start).size(),
                 "les deux classes deviennent un unique arc ANY");
-        assertSameLanguage(dfa, minimized, "abxé\uFFFF", 2);
+        assertSameLanguage(dfa, minimized, "abx\u0080\u00ff", 2);
     }
 
     /**
@@ -166,7 +166,7 @@ class DFAMHopcroftTest {
                 assertTrue(minimized.getStates().size() <= dfa.getStates().size());
                 DFATest.assertDeterministic(minimized);
                 for (int trial = 0; trial < 30; trial++) {
-                    String word = SearchGenerators.text(random, 10, "abxé\n\0\uFFFF");
+                    String word = SearchGenerators.text(random, 10, "abx\u0080\u00ff\n\0");
                     assertEquals(SearchGenerators.accepts(dfa, word), SearchGenerators.accepts(minimized, word),
                             "graine=" + seed + ", regex=" + example.expression() + ", mot=" + word);
                 }
@@ -195,7 +195,7 @@ class DFAMHopcroftTest {
                 NativeSearch.Prepared before = NativeSearch.fromSearchDfa(searchDfa);
                 NativeSearch.Prepared after = NativeSearch.fromSearchDfa(minimized);
                 for (int trial = 0; trial < 30; trial++) {
-                    String text = SearchGenerators.text(random, 14, "abxé\n\0\uFFFF");
+                    String text = SearchGenerators.text(random, 14, "abx\u0080\u00ff\n\0");
                     assertEquals(before.search(text), after.search(text),
                             "graine=" + seed + ", regex=" + example.expression() + ", texte=" + text);
                 }

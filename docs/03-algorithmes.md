@@ -9,8 +9,8 @@ L’analyse qui suit sépare trois choses : le problème mathématique, la const
 | Symbole | Signification |
 | :--- | :--- |
 | $m$ | Longueur de l’expression, ou du motif littéral selon la section |
-| $n$ | Longueur d’une ligne en unités UTF-16 |
-| $C$, $L$ | Nombre total d’unités UTF-16 du contenu des lignes, et nombre de lignes |
+| $n$ | Longueur d’une ligne en octets |
+| $C$, $L$ | Nombre total d’octets du contenu des lignes, et nombre de lignes |
 | $N$, $E$ | Nombre d’états et d’arcs du NFA à déterminer |
 | $X$ | Nombre d’exclusions de caractères stockées dans ce graphe |
 | $K$ | Nombre de classes de caractères considérées par la déterminisation |
@@ -112,7 +112,7 @@ Pour chaque sous-ensemble courant, le code découpe l’alphabet en classes disj
 | `a` | Tous les arcs littéraux `a` et les arcs `ANY` qui acceptent `a` |
 | Autres caractères | Les arcs `ANY` qui acceptent le représentant de cette classe |
 
-Dans le DFA, la seconde classe est stockée par `anyExcept`, sans créer 65 536 transitions pour les 65 536 valeurs possibles d’un `char` Java. Cette partition rend les décisions disjointes ; ce n’est pas un ordre de priorité entre deux arcs concurrents.
+Dans le DFA, la seconde classe est stockée par `anyExcept`, sans créer 256 transitions explicites pour les 256 valeurs possibles d’un octet. Cette partition rend les décisions disjointes ; ce n’est pas un ordre de priorité entre deux arcs concurrents.
 
 ### Coût
 
@@ -128,7 +128,7 @@ $$
 O\bigl(N+E+X+R(\lceil N/64\rceil+K)\bigr).
 $$
 
-Elle comprend les index, les bitsets mémorisés en mots de 64 bits, le graphe produit et ses exclusions locales. $K$ majore le nombre de classes locales. Aucune table de toutes les fermetures ε, potentiellement quadratique, n’est pré-calculée. L’alphabet `char` est borné ; la recherche d’un représentant de la classe complémentaire est donc elle aussi bornée par sa taille. L’explosion du nombre de sous-ensembles reste la difficulté principale : indexer les arcs évite des parcours inutiles, mais ne supprime pas cette croissance possible.
+Elle comprend les index, les bitsets mémorisés en mots de 64 bits, le graphe produit et ses exclusions locales. $K$ majore le nombre de classes locales. Aucune table de toutes les fermetures ε, potentiellement quadratique, n’est pré-calculée. L’alphabet contient exactement 256 valeurs ; la recherche d’un représentant de la classe complémentaire est donc bornée par cette constante. L’explosion du nombre de sous-ensembles reste la difficulté principale : indexer les arcs évite des parcours inutiles, mais ne supprime pas cette croissance possible.
 
 ## 5. Minimisation de Hopcroft sur DFA partiel et alphabet symbolique
 
@@ -136,7 +136,7 @@ Elle comprend les index, les bitsets mémorisés en mots de 64 bits, le graphe p
 
 Le cours précise aussi qu'un automate déterministe partiel doit être complété par un **dead state** non final bouclant sur tous les symboles. Dans le projet, une transition absente signifie rejet ; l'index interne ajoute donc exactement cet **état puits implicite**. Ce puits participe aux classes d'équivalence mais n'est pas matérialisé dans le résultat lorsqu'il ne correspond à aucun état réel accessible. Cette technique conserve le langage tout en gardant un graphe final partiel.
 
-L'alphabet n'est pas développé naïvement sur 65 536 valeurs `char`. On collecte globalement les caractères apparaissant comme arcs littéraux ou comme exclusions d'un arc `ANY`. Chacun forme une classe singleton ; toutes les autres valeurs partagent au plus une classe « autre ». Si `k` est le nombre de classes obtenues, l’index dense est construit pour tous les états fournis, plus le puits, avant de calculer l’accessibilité. En notant `N` ce total et `n` le nombre d’états accessibles, la mémoire de l’index est O(kN) ; le raffinement agit sur les `n` états accessibles. L’alphabet n’est pas nécessairement tout BMP.
+Hopcroft exploite l’alphabet fini de 256 valeurs sans l’élargir artificiellement. On collecte les symboles apparaissant comme arcs littéraux ou comme exclusions d’un arc `ANY`. Chacun forme une classe singleton ; toutes les autres valeurs partagent au plus une classe « autre ». Si `k≤256` est le nombre de classes obtenues, l’index dense est construit pour tous les états fournis, plus le puits, avant de calculer l’accessibilité. En notant `N` ce total et `n` le nombre d’états accessibles, la mémoire de l’index est $O(kN)$ ; le raffinement agit sur les `n` états accessibles.
 
 Pour éviter qu'une scission reparcoure un bloc entier, l'implémentation utilise :
 
@@ -175,7 +175,7 @@ Tous les sous-ensembles acceptants partagent un état terminal sans transitions.
 
 Si l’arbre accepte ε, `Benchmark` utilise directement un moteur toujours vrai. Il parcourt encore le fichier pour compter ou restituer les lignes et détecter les erreurs de décodage. La stratégie annoncée conserve DFA/DFAM si elle est imposée, ou AUTOMATON en sélection automatique pour un motif non littéral ; les phases NFA/DFA/DFAM non exécutées valent zéro.
 
-L’index contient uniquement des identifiants entiers. Pour les automates usuels, `NativeSearch` matérialise une table plate `delta[state × classe]`; une transition ne demande alors ni `HashMap`, ni objet `State`, ni recherche d'arc. Une table ASCII directe `deltaAscii[state × 128]` est en plus préparée lorsque sa taille reste bornée : le scan de fichier évite ainsi même la classification UTF-16 sur les octets ASCII. Si une table dense deviendrait excessive, le moteur rebascule sur la représentation paginée avec destination par défaut. Le parcours reste $O(n)$ au pire et $O(1)$ mémoire supplémentaire hors index préparé.
+L’index contient uniquement des identifiants entiers. Pour les automates usuels, `NativeSearch` matérialise directement $\delta[q,b]$ sous la forme d’un tableau plat `int[stateCount × 256]`. Le symbole lu est simplement `buffer[i] & 0xff`, puis la transition est obtenue par `delta[(state << 8) | symbol]` : aucune table de hachage, aucun objet `State`, aucune recherche d’arc et aucune classification supplémentaire dans la boucle chaude. Si cette table dépasserait 64 Mio, un repli compact par classes d’équivalence est utilisé. Le parcours reste $O(n)$ au pire et $O(1)$ mémoire mutable par curseur.
 
 La déterminisation reste potentiellement exponentielle. Aucun budget d’états ni repli sur une simulation NFA n’est encore implémenté. `NativeSearch` ne délègue ni à `String.contains` ni à `Pattern`.
 
@@ -212,7 +212,7 @@ Le parseur et l’extraction du littéral sont eux aussi linéaires : la borne t
 | NFA | $O(m)$ temps moyen et mémoire | Graphe commun, aucune copie de fragment |
 | DFA | $O(N+E+X+RK(N+E))$ en moyenne | $R$ peut atteindre $2^N$ |
 | DFAM | $O(k n \log n)$ après indexation | Hopcroft ; DFA partiel complété par un puits implicite |
-| Préparation NativeSearch | Une déterminisation directe, puis table dense/ASCII avec repli paginé | Explosion possible pendant la préparation |
+| Préparation NativeSearch | Une déterminisation directe, puis table `états × 256` avec repli compact | Explosion possible pendant la préparation |
 | Recherche NativeSearch préparée | $O(n)$ au pire | Coût et taille de l’index exclus de ce parcours |
 | Préparation KMP | $O(m)$ | Motif littéral uniquement |
 | Recherche KMP préparée | $O(n)$ | Préparation et parseur à ajouter au temps complet |

@@ -33,9 +33,7 @@ tests : exécuter `./run.sh` au préalable.
 
 - Bash, JDK compatible avec `pom.xml` (actuellement 21 ou supérieur), Maven ≥ 3.6.3.
 - Python ≥ 3.9 pour la comparaison et les tests des scripts ; bibliothèque standard uniquement.
-- GNU grep et une locale UTF-8 pour la comparaison. Sur macOS, `ggrep` est recherché
-  avant `grep`, car le grep fourni par macOS n'est pas GNU grep.
-  L'option `--grep /chemin/vers/grep` permet de choisir explicitement l'exécutable.
+- GNU grep pour la comparaison. Sur macOS, `ggrep` est recherché avant `grep`, car le grep fourni par macOS n'est pas GNU grep. Le protocole impose `LC_ALL=C` et utilise `grep -a -E`; l'option `--grep /chemin/vers/grep` permet de choisir explicitement l'exécutable.
 
 Le JDK indiqué par `JAVA_HOME` est utilisé pour compiler et lancer le projet.
 Si `JAVA_HOME` est absent, les scripts découvrent le JDK de `java` dans le PATH.
@@ -56,23 +54,11 @@ L'option `-E` correspond à l'ancien usage d'`egrep`, selon le
 
 Le protocole est le suivant :
 
-1. Copier le fichier en UTF-8 et convertir les fins de ligne CRLF/CR en LF. Les deux
-   programmes lisent **exactement cette même copie temporaire** ; l'original reste intact.
-   La conversion se fait par blocs et n'est pas chronométrée. Elle évite que
-   `BufferedReader` et grep interprètent différemment les séparateurs.
-2. Utiliser une locale UTF-8 installée et un motif appartenant au sous-ensemble commun :
-   concaténation, alternative `|`, étoile `*`, point `.` et parenthèses. Les extensions
-   non implémentées (`+`, `?`, classes, ancres, quantificateurs, etc.) sont refusées.
-   Les seuls échappements admis sont `\.`, `\*`, `\|`, `\(`, `\)` et `\\`.
-3. Refuser le texte UTF-8 invalide, les octets NUL et les caractères hors BMP, dans le
-   texte ou le motif. Les accents usuels sont acceptés. Les caractères hors BMP,
-   comme les emoji, sont exclus car le moteur Java travaille en unités UTF-16,
-   tandis que grep en locale UTF-8 travaille en caractères. Cette restriction porte
-   uniquement sur la comparaison ; le benchmark Java garde son contrat existant.
-4. Vérifier les comptages, effectuer 3 passages préalables par moteur puis 10 mesures
-   par moteur, avec un ordre mélangé à chaque paire et une graine fixée.
-5. Vérifier à nouveau le comptage après chaque exécution. Toute différence, erreur ou
-   expiration du délai interrompt l'expérience sans publier de statistiques finales.
+1. Copier les **octets** du fichier et convertir uniquement les fins de ligne CRLF/CR en LF. Les deux programmes lisent exactement cette même copie temporaire ; l'original reste intact. La normalisation se fait par blocs et n'est pas chronométrée.
+2. Fixer `LC_ALL=C` et utiliser un motif ASCII appartenant au sous-ensemble commun : concaténation, alternative `|`, étoile `*`, point `.` et parenthèses. Les extensions non implémentées (`+`, `?`, classes, ancres, quantificateurs, etc.) sont refusées. Les seuls échappements admis sont `\.`, `\*`, `\|`, `\(`, `\)` et `\\`.
+3. Traiter le corpus comme un alphabet de 256 valeurs. Les octets `0..255`, y compris NUL et les valeurs de poids fort, sont des données ordinaires ; le point consomme exactement un octet. GNU grep reçoit `-a` afin de ne pas appliquer de politique spéciale aux fichiers binaires.
+4. Vérifier les comptages, effectuer 3 passages préalables par moteur puis 10 mesures par moteur, avec un ordre mélangé à chaque paire et une graine fixée.
+5. Vérifier à nouveau le comptage après chaque exécution. Toute différence, erreur ou expiration du délai interrompt l'expérience sans publier de statistiques finales.
 
 **La durée mesurée est celle du processus complet**, depuis son lancement jusqu'à
 sa terminaison : démarrage de la JVM, préparation du motif, lecture, recherche,
@@ -131,7 +117,7 @@ et les durées.
 
 Le profil [`report-profile.json`](report-profile.json) est versionné et fixe la campagne. Les mots littéraux sont des témoins KMP ; les cas automate emploient des alternatives, wildcards et une famille de croissance `(a|b)*a(a|b)…(a|b)b` aux profondeurs 5, 7 et 9. Un helper Java compte les états/transitions NFA, DFA et DFAM **hors chronométrage**, afin de relier les temps à la structure réellement construite.
 
-La campagne de référence nécessite **Java 21**, Python ≥ 3.12, GNU grep et une locale UTF-8. L'environnement Matplotlib est mis en cache dans `.cache/report-venv/`. Une campagne normale refuse un arbre Git sale ; `--allow-dirty` garde les résultats locaux sans publication automatique ; `freeze-report.sh` permet ensuite une publication explicite avec empreintes des sources.
+La campagne de référence nécessite **Java 21**, Python ≥ 3.12 et GNU grep ; elle impose elle-même `LC_ALL=C`. L'environnement Matplotlib est mis en cache dans `.cache/report-venv/`. Une campagne normale refuse un arbre Git sale ; `--allow-dirty` garde les résultats locaux sans publication automatique ; `freeze-report.sh` permet ensuite une publication explicite avec empreintes des sources.
 
 Après validation des sorties numérotées contre GNU grep, le système recueille les observations CLI et JVM, recalcule les résumés, génère les six figures dans un dossier temporaire puis remplace `docs/assets/` avec restauration automatique en cas d'échec. Les corpus dérivés et doubles PNG sont ensuite supprimés. Sans `--purge`, les CSV/TXT restent sous `target/report/results/` ; avec `--purge`, ils sont supprimés uniquement après la publication.
 
@@ -139,4 +125,4 @@ Après validation des sorties numérotées contre GNU grep, le système recueill
 
 `compare-egrep.sh` reste disponible pour les essais libres avec paramètres ; ces essais ne produisent pas la référence du README. Voir le [protocole](../docs/05-experiences.md) et les [commandes détaillées](../docs/01-utilisation.md#5-reproduire-toute-la-campagne-du-rapport).
 
-Le profil `report-v4-dfa-dfam-kmp-grep` compare DFA et DFAM sur chaque regex et ajoute KMP pour `Elizabeth` et `ababababac`. Les graphiques utilisent les mêmes entrées par groupe et marquent KMP non applicable aux regex avec opérateurs. Il comprend 32 cas Java, dont 30 cas CLI à 30 processus par moteur, et 5 JVM par cas avec 10 prépassages puis 10 mesures. GNU grep -E joue le rôle d’egrep ; sa série affichée est celle associée au témoin DFA.
+Le profil `report-v5-byte-alphabet` compare DFA et DFAM sur chaque regex et ajoute KMP pour `Elizabeth` et `ababababac`. Les graphiques utilisent les mêmes entrées par groupe et marquent KMP non applicable aux regex avec opérateurs. Il comprend 32 cas Java, dont 30 cas CLI à 30 processus par moteur, et 5 JVM par cas avec 10 prépassages puis 10 mesures. GNU grep -E joue le rôle d’egrep ; sa série affichée est celle associée au témoin DFA.

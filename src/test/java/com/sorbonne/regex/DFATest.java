@@ -22,11 +22,11 @@ class DFATest {
     }
 
     /**
-     * Vérifie les DFA en chaîne, y compris les chaînes vides et les unités UTF-16.
+     * Vérifie les DFA en chaîne, y compris les chaînes vides et les bornes de l'alphabet 8 bits.
      * @param word mot littéral reconnu par le graphe construit
      */
     @ParameterizedTest
-    @ValueSource(strings = {"", "a", "ab", "aab", ".*", "é", "😀", "\uD800"})
+    @ValueSource(strings = {"", "a", "ab", "aab", ".*", "\u0080", "\u00ff"})
     void preservesLiteralLanguages(String word) {
         Automaton dfa = DFA.convert(AutomatonBuilder.literal(word));
         assertTrue(SearchGenerators.accepts(dfa, word));
@@ -60,15 +60,15 @@ class DFATest {
                 .any("s", "wildcard").character("literal", "f", 'c')
                 .character("wildcard", "f", 'b').build();
         Automaton dfa = DFA.convert(nfa);
-        for (String word : List.of("ab", "ac", "xb", "éb", "\nb", "\0b", "\uFFFFb")) {
+        for (String word : List.of("ab", "ac", "xb", "\u00ffb", "\nb", "\0b", "\u0080b")) {
             assertTrue(SearchGenerators.accepts(dfa, word), word);
         }
         for (String word : List.of("", "a", "xc", "abc")) {
             assertFalse(SearchGenerators.accepts(dfa, word), word);
         }
-        // Tous les 65 536 char doivent correspondre à exactement un arc initial.
+        // Les 256 valeurs de l'alphabet doivent correspondre à exactement un arc initial.
         List<Transition> outgoing = dfa.getOutgoingTransitions(dfa.getInitialState());
-        for (int code = Character.MIN_VALUE; code <= Character.MAX_VALUE; code++) {
+        for (int code = 0; code < 256; code++) {
             int count = 0;
             for (Transition transition : outgoing) {
                 if (transition.matches((char) code)) {
@@ -111,13 +111,13 @@ class DFATest {
     /** Vérifie les exclusions existantes, une seconde conversion et l'indépendance des graphes. */
     @Test
     void preservesRestrictedWildcardsAndDoesNotMutateInput() {
-        Set<Character> excluded = new HashSet<>(Set.of('a', 'é'));
+        Set<Character> excluded = new HashSet<>(Set.of('a', '\u00e9'));
         Automaton nfa = new AutomatonBuilder().state("s", Status.ENTER).state("f", Status.FINAL)
                 .anyExcept("s", "f", excluded).build();
         excluded.clear(); // La transition doit avoir conservé une copie de la configuration.
         Automaton first = DFA.convert(nfa);
         Automaton second = DFA.convert(first);
-        for (String word : List.of("", "a", "é", "b", "\0", "\uFFFF", "ab")) {
+        for (String word : List.of("", "a", "\u00e9", "b", "\0", "\u00ff", "ab")) {
             assertEquals(SearchGenerators.accepts(nfa, word), SearchGenerators.accepts(second, word), word);
         }
         assertEquals(Status.ENTER, nfa.getInitialState().getStatus());
@@ -152,7 +152,7 @@ class DFATest {
             }
             representatives.addAll(transition.getExcludedSymbols());
         }
-        for (int code = 0; code <= Character.MAX_VALUE; code++) {
+        for (int code = 0; code < 256; code++) {
             if (representatives.add((char) code)) {
                 break; // Un représentant suffit pour tous les caractères non mentionnés.
             }

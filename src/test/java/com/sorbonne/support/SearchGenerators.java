@@ -27,7 +27,7 @@ public final class SearchGenerators {
     }
 
     /**
-     * Génère une expression sur a, b, é et le point, puis union, concaténation ou étoile.
+     * Génère une expression sur a, b, c et le point, puis union, concaténation ou étoile.
      * La profondeur limite l'explosion des sous-ensembles et le temps du moteur oracle.
      * @param random générateur initialisé par une graine reproductible
      * @param depth profondeur maximale positive ou nulle
@@ -37,8 +37,8 @@ public final class SearchGenerators {
         if (depth == 0 || random.nextInt(4) == 0) {
             int atom = random.nextInt(4);
             return atom == 3 ? new RegexCase(new SyntaxTree(null, null, NodeType.DOT), ".")
-                    : new RegexCase(new SyntaxTree("abé".substring(atom, atom + 1)),
-                            "abé".substring(atom, atom + 1));
+                    : new RegexCase(new SyntaxTree("abc".substring(atom, atom + 1)),
+                            "abc".substring(atom, atom + 1));
         }
         RegexCase left = regex(random, depth - 1);
         int operator = random.nextInt(3);
@@ -56,7 +56,7 @@ public final class SearchGenerators {
      * Tire une chaîne de taille bornée avec répétitions et caractères spéciaux possibles.
      * @param random générateur du cas
      * @param maxLength longueur maximale incluse
-     * @param alphabet unités UTF-16 autorisées, non vide
+     * @param alphabet symboles 8 bits autorisés, non vide
      * @return chaîne pouvant être vide
      */
     public static String text(Random random, int maxLength, String alphabet) {
@@ -87,9 +87,9 @@ public final class SearchGenerators {
             String to = "" + random.nextInt(count);
             switch (random.nextInt(4)) {
                 case 0 -> builder.epsilon(from, to);
-                case 1 -> builder.character(from, to, "abé".charAt(random.nextInt(3)));
+                case 1 -> builder.character(from, to, "abc".charAt(random.nextInt(3)));
                 case 2 -> builder.any(from, to);
-                default -> builder.anyExcept(from, to, Set.of('a', 'é'));
+                default -> builder.anyExcept(from, to, Set.of('a', 'b'));
             }
         }
         return builder.build();

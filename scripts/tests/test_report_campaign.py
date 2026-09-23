@@ -13,25 +13,23 @@ SPEC.loader.exec_module(campaign)
 
 
 class ReportCampaignTest(unittest.TestCase):
-    def test_streamed_normalization_preserves_corpus_and_replication(self):
+    def test_streamed_replication_preserves_raw_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
-            source = directory / "source.txt"
-            for content in ["", "a", "\r\n", "été\r\na\rb\n\nlast",
-                            "x" * 65535 + "\r\n😀\rfin"]:
-                with self.subTest(length=len(content)):
-                    original = content.encode("utf-8")
+            source = directory / "source.bin"
+            for original in [b"", b"a", b"\r\n", b"\x80\xff\na\rb",
+                             b"x" * 65535 + b"\n\x00\xff\nfin"]:
+                with self.subTest(length=len(original)):
                     source.write_bytes(original)
-                    expected = content.replace("\r\n", "\n").replace("\r", "\n")
-                    if expected and not expected.endswith("\n"):
-                        expected += "\n"
+                    base = original + (b"\n" if original and not original.endswith(b"\n") else b"")
                     corpora, lines = campaign.prepare_scaled_corpora(source, directory, factors=(2, 3))
-                    self.assertEqual(expected.count("\n"), lines)
+                    self.assertEqual(base.count(b"\n"), lines)
                     self.assertEqual(source, corpora[1])
                     self.assertEqual(original, source.read_bytes())
                     self.assertEqual(hashlib.sha256(original).hexdigest(), campaign.sha256_file(source))
                     for factor in (2, 3):
-                        self.assertEqual((expected * factor).encode("utf-8"), corpora[factor].read_bytes())
+                        self.assertEqual(base * factor, corpora[factor].read_bytes())
+
 
 
 if __name__ == "__main__":

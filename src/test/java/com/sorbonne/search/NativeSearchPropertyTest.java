@@ -27,8 +27,8 @@ class NativeSearchPropertyTest {
     }
 
     /**
-     * Vérifie les mots littéraux et les propriétés d'insertion/extraction sur les char UTF-16.
-     * @return 400 cas, dont motifs vides, répétitifs, caractères spéciaux et substituts
+     * Vérifie les mots littéraux et les propriétés d'insertion/extraction sur l'alphabet 8 bits.
+     * @return 400 cas, dont motifs vides, répétitifs et caractères spéciaux
      */
     @TestFactory
     Stream<DynamicTest> agreesWithLiteralSearchAndInsertionProperties() {
@@ -36,7 +36,7 @@ class NativeSearchPropertyTest {
             long seed = 2210000L + index;
             return DynamicTest.dynamicTest("Motif littéral — graine=" + seed, () -> {
                 Random random = new Random(seed);
-                String alphabet = index % 2 == 0 ? "ab" : "ab.*|é\n\0😀\uFFFF";
+                String alphabet = index % 2 == 0 ? "ab" : "ab.*|\n\0\u0080\u00ff";
                 String text = SearchGenerators.text(random, 40, alphabet);
                 String pattern = SearchGenerators.text(random, 12, alphabet);
                 NativeSearch.Prepared prepared = NativeSearch.prepare(AutomatonBuilder.literal(pattern));
@@ -55,7 +55,7 @@ class NativeSearchPropertyTest {
 
     /**
      * Vérifie la recherche de regex contre le moteur Java sur un domaine sémantiquement commun.
-     * @return 300 arbres de profondeur au plus 3, avec 16 textes BMP par préparation
+     * @return 300 arbres de profondeur au plus 3, avec 16 textes 8 bits par préparation
      */
     @TestFactory
     Stream<DynamicTest> agreesWithJavaRegexFind() {
@@ -69,7 +69,7 @@ class NativeSearchPropertyTest {
                 NativeSearch.Prepared direct = NativeSearch.prepareNfa(nfa);
                 Pattern oracle = Pattern.compile(example.expression(), Pattern.DOTALL);
                 for (int trial = 0; trial < 16; trial++) {
-                    String text = SearchGenerators.text(random, 16, "abxé\n\0");
+                    String text = SearchGenerators.text(random, 16, "abx\u0080\u00ff\n\0");
                     assertEquals(oracle.matcher(text).find(), direct.search(text), "NFA direct : " + example.expression());
                     SearchCursor cursor = direct.newCursor();
                     for (int i = 0; i < text.length(); i++) {
@@ -99,7 +99,7 @@ class NativeSearchPropertyTest {
                 NativeSearch.Prepared prepared = NativeSearch.prepare(DFA.convert(nfa));
                 NativeSearch.Prepared direct = NativeSearch.prepareNfa(nfa);
                 for (int trial = 0; trial < 12; trial++) {
-                    String text = SearchGenerators.text(random, 8, "abxé\n\0\uFFFF");
+                    String text = SearchGenerators.text(random, 8, "abx\u0080\u00ff\n\0");
                     assertEquals(SearchGenerators.contains(nfa, text), direct.search(text), "NFA direct : " + text);
                     assertEquals(SearchGenerators.contains(nfa, text), prepared.search(text),
                             "graine=" + seed + ", essai=" + trial + ", texte=" + text);
