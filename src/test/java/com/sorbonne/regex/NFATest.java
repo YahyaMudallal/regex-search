@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
 
 import com.sorbonne.automata.Automaton;
-import com.sorbonne.automata.State;
 import com.sorbonne.automata.Status;
 import com.sorbonne.automata.Transition;
 

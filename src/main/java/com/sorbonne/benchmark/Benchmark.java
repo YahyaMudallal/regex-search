@@ -10,7 +10,7 @@ import java.util.function.Predicate;
 
 import com.sorbonne.automata.Automaton;
 import com.sorbonne.regex.DFA;
-import com.sorbonne.regex.DFAM;
+import com.sorbonne.regex.DFAMMoore;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
@@ -25,7 +25,7 @@ import com.sorbonne.utils.FileLoader;
  * Le motif est une expression régulière du langage de {@link RegexParser},
  * pas un filtre de noms de fichiers. En mode automatique, une concaténation
  * de lettres utilise KMP ; les autres expressions passent par NFA, DFA,
- * {@link DFAM#minimize(Automaton)} puis NativeSearch. La minimisation est
+ * {@link DFAMMoore#minimize(Automaton)} puis NativeSearch. La minimisation est
  * encore
  * une étape provisoire qui rend le même automate.
  * </p>
@@ -204,10 +204,10 @@ public final class Benchmark {
             Automaton dfa = DFA.convert(nfa);
             dfaNanos = System.nanoTime() - phaseStart;
             phaseStart = System.nanoTime();
-            Automaton minimized = DFAM.minimize(dfa);
+            // Automaton minimized = DFAMMoore.minimize(dfa, false);
             minimizationNanos = System.nanoTime() - phaseStart;
             phaseStart = System.nanoTime();
-            NativeSearch.Prepared prepared = NativeSearch.prepare(minimized);
+            NativeSearch.Prepared prepared = NativeSearch.prepare(dfa);
             search = prepared::search;
             searchPreparationNanos = System.nanoTime() - phaseStart;
         }
@@ -252,8 +252,8 @@ public final class Benchmark {
         } else {
             Automaton nfa = NFA.buildNFA(tree);
             Automaton dfa = DFA.convert(nfa);
-            Automaton minimized = DFAM.minimize(dfa);
-            search = NativeSearch.prepare(minimized)::search;
+            // Automaton minimized = DFAMMoore.minimize(dfa, false);
+            search = NativeSearch.prepare(dfa)::search;
         }
 
         try (BufferedReader reader = FileLoader.open(file)) {

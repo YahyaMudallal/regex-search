@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.ArrayList;
 
 /**
- * Class representing a syntax tree returned by the {@link RegexParser}.
+ * Arbre syntaxique retourné par le {@link RegexParser}.
  */
 public class SyntaxTree {
 
@@ -15,10 +15,11 @@ public class SyntaxTree {
     private SyntaxTree right;
 
     /**
-     * Constructor for a {@link SyntaxTree} with an operator node.
-     * @param left  The subtree of the left child.
-     * @param right The subtree of the right child.
-     * @param type  The type of the node.
+     * Construit un {@link SyntaxTree} représentant un noeud opérateur.
+     *
+     * @param left le sous-arbre fils gauche
+     * @param right le sous-arbre fils droit
+     * @param type le type du noeud
      */
     public SyntaxTree(SyntaxTree left, SyntaxTree right, NodeType type) {
         this.left = left;
@@ -28,8 +29,9 @@ public class SyntaxTree {
     }
 
     /**
-     * Constructor of a leaf of the {@link SyntaxTree} containing a literal letter.
-     * @param letter The letter the node contains.
+     * Construit une feuille du {@link SyntaxTree} contenant une lettre littérale.
+     *
+     * @param letter la lettre contenue dans le noeud
      */
     public SyntaxTree(String letter) {
         this.left = null;
@@ -56,12 +58,12 @@ public class SyntaxTree {
     }
 
     /**
-     * Renders the syntax tree as a branch-based text representation.
+     * Représente l'arbre syntaxique sous forme d'arbre textuel.
      *
-     * @param node current node to display
-     * @param prefix indentation already applied
-     * @param isTail true when this node is the last child of its parent
-     * @return a multi-line tree representation readable in a console
+     * @param node le noeud courant à afficher
+     * @param prefix l'indentation déjà appliquée
+     * @param isTail vrai si le noeud est le dernier fils de son parent
+     * @return une représentation arborescente multi-ligne lisible dans une console
      */
     private String toTreeString(SyntaxTree node, String prefix, boolean isTail) {
         if (node == null) {
@@ -90,10 +92,10 @@ public class SyntaxTree {
     }
 
     /**
-     * Returns the label displayed for a node in the tree view.
+     * Retourne l'étiquette affichée pour un noeud dans l'arbre.
      *
-     * @param node the node whose label must be displayed
-     * @return readable symbol for the node type
+     * @param node le noeud dont l'étiquette doit être affichée
+     * @return le symbole lisible correspondant au type du noeud
      */
     private String getNodeLabel(SyntaxTree node) {
         if (node.nodeType == NodeType.LETTER) {

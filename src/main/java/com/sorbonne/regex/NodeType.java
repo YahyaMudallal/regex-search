@@ -1,7 +1,7 @@
 package com.sorbonne.regex;
 
 /**
- * Enum representing all the nodes of the types of SyntaxTree.
+ * Enumeration representant les différents types de noeuds dans l'arbre syntaxique.
  */
 public enum NodeType {
 	ALTERNATION,

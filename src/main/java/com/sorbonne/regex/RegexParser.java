@@ -6,10 +6,11 @@ import java.util.List;
 public class RegexParser {
 
     /**
-     * Parse the regex String and return a SyntaxTree.
-     * @param regex			The plain regex.
-     * @return 			 	The {@link SyntaxTree} corresponding to the regex.
-     * @throws Exception 	In case of a syntax error.
+     * Analyse l'expression régulière et retourne son arbre syntaxique.
+     *
+     * @param regex l'expression régulière brute
+     * @return l'{@link SyntaxTree} correspondant à l'expression
+     * @throws Exception en cas d'erreur de syntaxe
      */
     public static SyntaxTree parse(String regex) throws Exception {
         if (regex == null || regex.isEmpty()) {
@@ -20,11 +21,11 @@ public class RegexParser {
         return parse(result);
     }
 
-    
     /**
-     * Initialize the list of {@link SyntaxTree} for the parsing algorithm.s
-     * @param regex		The original regex.
-     * @return			The list of SyntaxTree.
+     * Initialise la liste de {@link SyntaxTree} utilisée par l'algorithme d'analyse.
+     *
+     * @param regex l'expression régulière d'origine
+     * @return la liste des arbres syntaxiques
      */
     protected static List<SyntaxTree> initSyntaxTreeList(String regex) {
         List<SyntaxTree> result = new ArrayList<>();
@@ -45,7 +46,7 @@ public class RegexParser {
                 continue;
             }
             
-            // create the syntax tree according the each character
+            // Crée le noeud syntaxique correspondant à chaque caractère
             switch (c) {
                 case '(':
                     result.add(new SyntaxTree(null, null, NodeType.OPEN_PARENTHESE));
@@ -76,10 +77,11 @@ public class RegexParser {
     }
 
     /**
-     * Main loop of parsing ordered by priority.
-     * @param result		The list of syntax trees.
-     * @return				The final SyntaxTree.
-     * @throws Exception	If the reduction fails.
+     * Boucle principale de l'analyse, selon l'ordre de priorité des opérateurs.
+     *
+     * @param result la liste des arbres syntaxiques
+     * @return l'arbre syntaxique final
+     * @throws Exception si une réduction échoue
      */
     private static SyntaxTree parse(List<SyntaxTree> result) throws Exception {
         while (containParenthese(result)) {
@@ -99,14 +101,15 @@ public class RegexParser {
             throw new Exception("Syntax error : incomplete reduction of the Syntax Tree list.");
         }
 
-        // return the final tree cleaned from the protection nodes
+        // Retourne l'arbre final débarrassé des noeuds de protection
         return removeProtection(result.get(0));
     }
 
     /**
-     * Checks if the tree contains parentheses.
-     * @param trees		The tree to check.
-     * @return			boolean corresponding to the result of the check.
+     * Vérifie si la liste contient des parenthèses.
+     *
+     * @param trees la liste à vérifier
+     * @return vrai si une parenthèse est présente
      */
     private static boolean containParenthese(List<SyntaxTree> trees) {
         for (SyntaxTree t : trees) {
@@ -118,11 +121,12 @@ public class RegexParser {
     }
     
     /**
-     * Process the parentheses in the array of trees, 
-     * once treated the expression with parentheses is under a tree with a PROTECTION root.
-     * @param trees			The Syntax trees to process.
-     * @return				The new list with the parentheses processed.
-     * @throws Exception	a parentheses insn't closed.
+     * Traite les parenthèses de la liste.
+     * Une expression parenthésée est alors placée sous un noeud racine PROTECTION.
+     *
+     * @param trees les arbres syntaxiques à traiter
+     * @return la nouvelle liste après traitement des parenthèses
+     * @throws Exception si une parenthèse n'est pas fermée
      */
     private static List<SyntaxTree> processParenthese(List<SyntaxTree> trees) throws Exception {
         List<SyntaxTree> result = new ArrayList<>();
@@ -133,7 +137,7 @@ public class RegexParser {
                 boolean done = false;
                 List<SyntaxTree> content = new ArrayList<>();
 
-                // pop until finding '('
+                // Retire les noeuds jusqu'à trouver '('
                 while (!done && !result.isEmpty()) {
                     SyntaxTree last = result.remove(result.size() - 1);
                     if (last.getNodeType() == NodeType.OPEN_PARENTHESE) {
@@ -149,7 +153,7 @@ public class RegexParser {
 
                 found = true;
                 SyntaxTree subTree = parse(content);
-                // Isolate the sub tree under a PROTECTION node
+                // Isole le sous-arbre sous un noeud PROTECTION
                 result.add(new SyntaxTree(subTree, null, NodeType.PROTECTION));
             } else {
                 result.add(t);
@@ -164,9 +168,10 @@ public class RegexParser {
     }
 
     /**
-     * Checks if the tree contains a star.
-     * @param trees		The tree to check.
-     * @return			boolean corresponding to the result of the check.
+     * Vérifie si la liste contient une étoile.
+     *
+     * @param trees la liste à vérifier
+     * @return vrai si une étoile non traitée est présente
      */
     private static boolean containEtoile(List<SyntaxTree> trees) {
         for (SyntaxTree t : trees) {
@@ -178,10 +183,11 @@ public class RegexParser {
     }
 
     /**
-     * Process the stars in the array of trees.
-     * @param trees			The Syntax trees to process.
-     * @return				The new list with the stars processed.
-     * @throws Exception	If an argument is missing.
+     * Traite les étoiles de la liste.
+     *
+     * @param trees les arbres syntaxiques à traiter
+     * @return la nouvelle liste après traitement des étoiles
+     * @throws Exception si l'opérande de l'étoile est absente
      */
     private static List<SyntaxTree> processEtoile(List<SyntaxTree> trees) throws Exception {
         List<SyntaxTree> result = new ArrayList<>();
@@ -204,9 +210,10 @@ public class RegexParser {
     }
 
     /** 
-     * Checks if the tree contains a concatenation.
-     * @param trees		The tree to check.
-     * @return			boolean corresponding to the result of the check.
+     * Vérifie si la liste contient une concaténation.
+     *
+     * @param trees la liste à vérifier
+     * @return vrai si une concaténation est présente
      */
     private static boolean containConcat(List<SyntaxTree> trees) {
         boolean firstFound = false;
@@ -227,10 +234,11 @@ public class RegexParser {
     }
 
     /**
-     * Process the concatenation in the array of trees.
-     * @param trees			The Syntax trees to process.
-     * @return				The new list with the concatenations processed.
-     * @throws Exception	If an error occur.
+     * Traite les concaténations de la liste.
+     *
+     * @param trees les arbres syntaxiques à traiter
+     * @return la nouvelle liste après traitement des concaténations
+     * @throws Exception en cas d'erreur lors du traitement
      */
     private static List<SyntaxTree> processConcat(List<SyntaxTree> trees) throws Exception {
         List<SyntaxTree> result = new ArrayList<>();
@@ -261,9 +269,10 @@ public class RegexParser {
     }
 
     /** 
-     * Checks if the tree contains alternation.
-     * @param trees		The tree to check.
-     * @return			boolean corresponding to the result of the check.
+     * Vérifie si la liste contient une alternance.
+     *
+     * @param trees la liste à vérifier
+     * @return vrai si une alternance non traitée est présente
      */
     private static boolean containAltern(List<SyntaxTree> trees) {
         for (SyntaxTree t : trees) {
@@ -275,10 +284,11 @@ public class RegexParser {
     }
 
     /**
-     * Process the alternation in the array of trees.
-     * @param trees			The Syntax trees to process.
-     * @return				The new list with the alternation processed.
-     * @throws Exception	If an error occur.
+     * Traite les alternances de la liste.
+     *
+     * @param trees les arbres syntaxiques à traiter
+     * @return la nouvelle liste après traitement des alternances
+     * @throws Exception en cas d'erreur lors du traitement
      */
     private static List<SyntaxTree> processAltern(List<SyntaxTree> trees) throws Exception {
         List<SyntaxTree> result = new ArrayList<>();
@@ -315,10 +325,11 @@ public class RegexParser {
     }
 
     /**
-     * Remove the protection nodes from the final tree.
-     * @param tree			The tree to cleanup.
-     * @return				The tree without the protection nodes.
-     * @throws Exception	If a protection node has no child.
+     * Supprime les noeuds de protection de l'arbre final.
+     *
+     * @param tree l'arbre à nettoyer
+     * @return l'arbre sans les noeuds de protection
+     * @throws Exception si un noeud de protection n'a pas de fils
      */
     private static SyntaxTree removeProtection(SyntaxTree tree) throws Exception {
         if (tree == null) {

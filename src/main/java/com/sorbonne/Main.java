@@ -9,7 +9,7 @@ import com.sorbonne.automata.Status;
 import com.sorbonne.automata.Transition;
 import com.sorbonne.benchmark.Benchmark;
 import com.sorbonne.regex.DFA;
-import com.sorbonne.regex.DFAM;
+import com.sorbonne.regex.DFAMMoore;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
@@ -146,16 +146,17 @@ public class Main {
         SyntaxTree tree = RegexParser.parse(expression);
         Automaton nfa = NFA.buildNFA(tree);
         Automaton dfa = DFA.convert(nfa);
-        Automaton minimized = DFAM.minimize(dfa);
+        // Automaton minimized = DFAMMoore.minimize(dfa, false);
         System.out.println("Expression : " + expression);
         System.out.println("Arbre : " + tree);
         System.out.println("NFA :\n" + nfa);
         System.out.println("DFA :\n" + dfa);
+        // System.out.println("DFAM :\n" + minimized);
 
         // La préparation peut être coûteuse ; elle est partagée entre toutes les
         // lignes.
         System.out.println("DFAM : étape provisoire, le DFA est conservé tel quel.");
-        NativeSearch.Prepared prepared = NativeSearch.prepare(minimized);
+        NativeSearch.Prepared prepared = NativeSearch.prepare(dfa);
         for (String text : new String[] { "xxa", "xxbccc", "xxx", "" }) {
             System.out.printf("  Texte : \"%s\" -> occurrence : %s%n", text, prepared.search(text));
         }
