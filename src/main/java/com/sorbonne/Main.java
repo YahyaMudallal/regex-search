@@ -1,5 +1,6 @@
 package com.sorbonne;
 
+import java.io.PrintStream;
 import java.nio.file.Path;
 import java.util.Locale;
 
@@ -9,7 +10,7 @@ import com.sorbonne.automata.Status;
 import com.sorbonne.automata.Transition;
 import com.sorbonne.benchmark.Benchmark;
 import com.sorbonne.regex.DFA;
-import com.sorbonne.regex.DFAMMoore;
+import com.sorbonne.regex.DFAMHopcroft;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
@@ -36,6 +37,9 @@ import com.sorbonne.search.SearchAlgorithm;
  * </p>
  */
 public class Main {
+    /** Aide concise commune au JAR et aux scripts. */
+    private static final String USAGE = "Usage : java -jar regex-search.jar [--count|--print] <fichier> <regex> [AUTO|KMP|DFA|DFAM|AUTOMATON]";
+
     /** Ligne utilisée dans la console pour séparer visuellement les sections. */
     private static final String SEPARATOR = "=".repeat(64);
 
@@ -60,27 +64,9 @@ public class Main {
      */
     public static void main(String[] args) throws Exception {
         if (args.length != 0) {
-            boolean countOnly = "--count".equals(args[0]);
-            boolean printLines = "--print".equals(args[0]);
-            int offset = countOnly || printLines ? 1 : 0;
-            int remaining = args.length - offset;
-            if (remaining < 2 || remaining > 3) {
-                throw new IllegalArgumentException(
-                        "Usage : Main [--count|--print] <fichier> <regex> [AUTO|KMP|AUTOMATON]");
-            }
-            Benchmark.Strategy strategy = remaining == 3
-                    ? Benchmark.Strategy.valueOf(args[offset + 2].toUpperCase(Locale.ROOT))
-                    : Benchmark.Strategy.AUTO;
-            Benchmark benchmark = new Benchmark(Path.of(args[offset]), args[offset + 1], strategy);
-            if (printLines) {
-                benchmark.forEachMatchingLine((lineNumber, line) -> System.out.println(lineNumber + ":" + line));
-                return;
-            }
-            Benchmark.Result result = benchmark.pipeline();
-            if (countOnly) {
-                System.out.println(result.matchingLines());
-            } else {
-                printBenchmarkResult(result);
+            int exitCode = runCommand(args, System.out, System.err);
+            if (exitCode != 0) {
+                System.exit(exitCode);
             }
             return;
         }
@@ -118,9 +104,80 @@ public class Main {
         demonstrateBenchmark();
 
         // ================================================================
-        // PARTIE 6 — Étapes à intégrer au fil de l'implémentation
+        // PARTIE 6 — État final de l'implémentation
         // ================================================================
         printNextSteps();
+    }
+
+    /**
+     * Exécute une commande CLI sans terminer la JVM, ce qui rend le comportement
+     * testable indépendamment de {@link System#exit(int)}.
+     *
+     * @param args arguments de ligne de commande, non vides
+     * @param out  flux de sortie normale
+     * @param err  flux des diagnostics utilisateur
+     * @return 0 en cas de succès, 2 pour une erreur d'usage, de motif ou d'E/S
+     */
+    static int runCommand(String[] args, PrintStream out, PrintStream err) {
+        try {
+            if (args.length == 1 && ("--help".equals(args[0]) || "-h".equals(args[0]))) {
+                printHelp(out);
+                return 0;
+            }
+            boolean countOnly = "--count".equals(args[0]);
+            boolean printLines = "--print".equals(args[0]);
+            int offset = countOnly || printLines ? 1 : 0;
+            int remaining = args.length - offset;
+            if (remaining < 2 || remaining > 3) {
+                throw new IllegalArgumentException(USAGE);
+            }
+            Benchmark.Strategy strategy = Benchmark.Strategy.AUTO;
+            if (remaining == 3) {
+                try {
+                    strategy = Benchmark.Strategy.valueOf(args[offset + 2].toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException error) {
+                    throw new IllegalArgumentException("Stratégie inconnue '" + args[offset + 2]
+                            + "'. Valeurs : AUTO, KMP, DFA, DFAM, AUTOMATON.", error);
+                }
+            }
+            Benchmark benchmark = new Benchmark(Path.of(args[offset]), args[offset + 1], strategy);
+            if (printLines) {
+                benchmark.forEachMatchingLine((lineNumber, line) -> out.println(lineNumber + ":" + line));
+                return 0;
+            }
+            Benchmark.Result result = benchmark.pipeline();
+            if (countOnly) {
+                out.println(result.matchingLines());
+            } else {
+                printBenchmarkResult(result, out);
+            }
+            return 0;
+        } catch (Exception error) {
+            String message = error.getMessage();
+            if (message == null || message.isBlank()) {
+                message = error.getClass().getSimpleName();
+            }
+            err.println("Erreur : " + message);
+            if (!message.contains("Usage :")) {
+                err.println(USAGE);
+            }
+            return 2;
+        }
+    }
+
+    /** Affiche les formes de lancement sans exécuter les démonstrations. */
+    private static void printHelp(PrintStream out) {
+        out.println(USAGE);
+        out.println();
+        out.println("Modes :");
+        out.println("  --print   affiche numéro:ligne pour chaque ligne correspondante");
+        out.println("  --count   affiche uniquement le nombre de lignes correspondantes");
+        out.println("  sans mode affiche les mesures détaillées du pipeline");
+        out.println();
+        out.println("Stratégies : AUTO choisit KMP pour un motif littéral, sinon AUTOMATON.");
+        out.println("              KMP, DFA et DFAM imposent un moteur ; AUTOMATON conserve le chemin DFAM.");
+        out.println("Code de sortie : 0 succès, 2 erreur d'usage/motif/fichier.");
+        out.println("Sans argument, le programme exécute la démonstration pédagogique.");
     }
 
     // ====================================================================
@@ -146,7 +203,7 @@ public class Main {
         SyntaxTree tree = RegexParser.parse(expression);
         Automaton nfa = NFA.buildNFA(tree);
         Automaton dfa = DFA.convert(nfa);
-        // Automaton minimized = DFAMMoore.minimize(dfa, false);
+        Automaton minimized = DFAMHopcroft.minimize(dfa);
         System.out.println("Expression : " + expression);
         System.out.println("Arbre : " + tree);
         System.out.println("NFA :\n" + nfa);
@@ -155,8 +212,9 @@ public class Main {
 
         // La préparation peut être coûteuse ; elle est partagée entre toutes les
         // lignes.
-        System.out.println("DFAM : étape provisoire, le DFA est conservé tel quel.");
-        NativeSearch.Prepared prepared = NativeSearch.prepare(dfa);
+        System.out.printf("DFAM : %d états → %d états après minimisation.%n", dfa.getStates().size(),
+                minimized.getStates().size());
+        NativeSearch.Prepared prepared = NativeSearch.prepare(minimized);
         for (String text : new String[] { "xxa", "xxbccc", "xxx", "" }) {
             System.out.printf("  Texte : \"%s\" -> occurrence : %s%n", text, prepared.search(text));
         }
@@ -384,9 +442,9 @@ public class Main {
     private static void demonstrateBenchmark() throws Exception {
         printSection("5. Benchmark — un fichier texte, lu ligne par ligne");
         Path file = Path.of("Samples", "PrideAndPrejudice.txt");
-        printBenchmarkResult(new Benchmark(file, "Elizabeth").pipeline());
-        printBenchmarkResult(new Benchmark(file, "Elizabeth", Benchmark.Strategy.AUTOMATON).pipeline());
-        printBenchmarkResult(new Benchmark(file, "Elizabeth|Darcy").pipeline());
+        printBenchmarkResult(new Benchmark(file, "Elizabeth").pipeline(), System.out);
+        printBenchmarkResult(new Benchmark(file, "Elizabeth", Benchmark.Strategy.AUTOMATON).pipeline(), System.out);
+        printBenchmarkResult(new Benchmark(file, "Elizabeth|Darcy").pipeline(), System.out);
     }
 
     /**
@@ -395,23 +453,22 @@ public class Main {
      * 
      * @param result compteurs et durées d'une exécution complète
      */
-    private static void printBenchmarkResult(Benchmark.Result result) {
+    private static void printBenchmarkResult(Benchmark.Result result, PrintStream out) {
         Benchmark.Timings time = result.timings();
-        System.out.printf("%nFichier : %s%nRegex : %s | Moteur : %s%n",
+        out.printf("%nFichier : %s%nRegex : %s | Moteur : %s%n",
                 result.file(), result.pattern(), result.strategy());
-        System.out.printf("Lignes correspondantes : %d / %d%n", result.matchingLines(), result.totalLines());
-        System.out.printf("Préparation : %.3f ms (analyse : %.3f ; moteur : %.3f)%n",
+        out.printf("Lignes correspondantes : %d / %d%n", result.matchingLines(), result.totalLines());
+        out.printf("Préparation : %.3f ms (analyse : %.3f ; moteur : %.3f)%n",
                 time.preparationNanos() / 1_000_000.0, time.parsingNanos() / 1_000_000.0,
                 time.searchPreparationNanos() / 1_000_000.0);
-        if (result.strategy() == Benchmark.Strategy.AUTOMATON) {
-            System.out.printf("  NFA : %.3f ms | DFA : %.3f ms | DFAM provisoire : %.3f ms%n",
+        if (result.strategy() != Benchmark.Strategy.KMP) {
+            out.printf("  NFA : %.3f ms | DFA : %.3f ms | DFAM (Hopcroft) : %.3f ms%n",
                     time.nfaNanos() / 1_000_000.0, time.dfaNanos() / 1_000_000.0,
                     time.minimizationNanos() / 1_000_000.0);
-            System.out.println("  Minimisation non implémentée : DFAM renvoie le même automate.");
         }
-        System.out.printf("Lecture + recherche (IO incluses) : %.3f ms | Total : %.3f ms%n",
+        out.printf("Lecture + recherche (IO incluses) : %.3f ms | Total : %.3f ms%n",
                 time.scanNanos() / 1_000_000.0, time.totalNanos() / 1_000_000.0);
-        System.out.println("Mesure unique ; échauffement et répétitions nécessaires pour comparer les performances.");
+        out.println("Mesure unique ; échauffement et répétitions nécessaires pour comparer les performances.");
     }
 
     // ====================================================================
@@ -435,9 +492,7 @@ public class Main {
 
         System.out.println("[Fait] Déterminiser le NFA en DFA avec classes de caractères disjointes.");
 
-        // TODO : Implémenter la minimisation dans la classe DFAM à la place du
-        // placeholder.
-        System.out.println("[À faire] Minimiser le nombre d'états du DFA.");
+        System.out.println("[Fait] Minimiser le DFA par raffinement de Hopcroft.");
 
         System.out.println("[Fait] Afficher les lignes correspondantes hors du benchmark chronométré.");
 
@@ -447,8 +502,7 @@ public class Main {
 
         System.out.println("[Fait] Rechercher avec NativeSearch et partager le contrat typé avec KMP.");
 
-        // TODO : Échauffer, répéter, calculer les statistiques et comparer à egrep.
-        System.out.println("[À faire] Répéter les mesures et comparer les résultats et performances à egrep.");
+        System.out.println("[Fait] Répéter les mesures et comparer résultats et performances à GNU grep -E.");
     }
 
     // ====================================================================

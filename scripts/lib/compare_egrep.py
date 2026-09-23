@@ -146,7 +146,7 @@ def parse_args():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("file", type=Path, help="fichier texte UTF-8, relatif au répertoire courant")
     parser.add_argument("regex", help="regex commune au projet et à grep, à protéger avec des guillemets")
-    parser.add_argument("--strategy", choices=("AUTO", "KMP", "AUTOMATON"), default="AUTO")
+    parser.add_argument("--strategy", choices=("AUTO", "KMP", "DFA", "DFAM", "AUTOMATON"), default="AUTO")
     parser.add_argument("--runs", type=positive_int, default=10, help="mesures par moteur (défaut : 10)")
     parser.add_argument("--warmups", type=int, default=3, help="passages préalables non mesurés (défaut : 3)")
     parser.add_argument("--seed", type=int, default=42, help="graine de l'ordre aléatoire (défaut : 42)")
@@ -191,7 +191,7 @@ def main():
         print(f"Référence : {grep_version} | locale : {environment['LC_ALL']}", flush=True)
         print("Mesure de processus complets : démarrage JVM, préparation, IO et comptage inclus.", flush=True)
         print("Passages préalables : cache de fichiers sollicité ; chaque JVM redémarre.", flush=True)
-        print("DFAM est encore un placeholder : aucune minimisation effective.", flush=True)
+        print("DFAM : minimisation de Hopcroft activée.", flush=True)
 
         # Validation hors chronométrage publié, puis vérification à chaque répétition.
         expected, _ = run_count(commands["grep"], environment, args.timeout, grep=True)
@@ -218,7 +218,7 @@ def main():
             "grep_version": grep_version, "java_version": java_version,
             "platform": sys.platform, "commands": commands, "matching_lines": expected,
             "scope": "process wall time including startup, preparation, IO and count output",
-            "minimization_implemented": False,
+            "minimization_implemented": True,
             "temporary_corpus_deleted_after_run": True,
         }
 

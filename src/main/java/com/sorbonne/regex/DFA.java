@@ -6,7 +6,7 @@ import com.sorbonne.automata.Status;
 import com.sorbonne.automata.Transition;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
+import java.util.BitSet;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -16,174 +16,215 @@ import java.util.Queue;
 import java.util.Set;
 
 /**
- * Déterminise un automate par la construction des sous-ensembles avec fermeture ε.
+ * Déterminisation par sous-ensembles accessibles, représentés par des BitSet.
+ * Les arcs ε, littéraux et ANY sont indexés séparément. Un déplacement ne
+ * reparcourt pas les arcs littéraux portant d'autres caractères ; une fermeture
+ * ne parcourt que les arcs ε. Les clés de la table ne sont plus modifiées.
  *
- * <p>Chaque état produit représente un ensemble d'états du NFA. Il est final dès
- * qu'un de ces états est final. Seuls les ensembles accessibles sont construits.
- * Le résultat est un DFA partiel : une transition absente signifie un rejet,
- * sans création obligatoire d'un état puits. La minimisation est une étape distincte.</p>
- *
- * <p>Les lettres explicites et les exclusions des arcs ANY découpent l'alphabet
- * en classes disjointes : un singleton par lettre, puis « tous les autres ».
- * Un déplacement sur une lettre réunit les arcs littéraux ET les arcs ANY qui
- * l'acceptent. La classe restante utilise {@link Transition#anyExcept} : aucune
- * priorité artificielle entre une lettre et le point universel n'est nécessaire.</p>
- *
- * <p><strong>Complexité :</strong> N états, E arcs, X exclusions stockées en entrée,
- * K classes de caractères et R sous-ensembles accessibles, avec R ≤ 2^N.
- * L'indexation coûte O(N + E + X). Chaque couple (sous-ensemble, classe) parcourt
- * au plus les états et arcs du NFA pour le déplacement et la fermeture :
- * O(N + E + X + R K (N + E)) en temps moyen avec les tables de hachage.
- * La mémoire supplémentaire est O(N + E + X + R(N + K)) : index, ensembles
- * mémorisés et graphe produit. L'ensemble des exclusions de sortie est partagé.</p>
- *
- * <p>L'explosion exponentielle peut être inévitable pour un DFA équivalent.
- * Cette implémentation évite les parcours complets des arcs pour chaque état,
- * mais ne prétend pas être optimale pour toute famille d'automates. L'entrée
- * n'est pas modifiée et ne doit pas être modifiée pendant la conversion.</p>
+ * <p>Pour N états, E arcs, X exclusions, K classes et R sous-ensembles accessibles,
+ * la borne reste O(N + E + X + RK(N + E)) en temps moyen. Les bitsets occupent
+ * O(R ceil(N/64)) mots ; le graphe produit O(RK), les index O(N + E + X).
+ * Aucune table quadratique de toutes les fermetures n'est pré-calculée.
+ * Un DFA équivalent peut nécessiter un nombre exponentiel d'états.</p>
  */
 public final class DFA {
-    /** Fabrique statique : aucune instance à construire. */
     private DFA() {
     }
 
     /**
-     * Construit un DFA reconnaissant exactement les mêmes mots complets que l'entrée.
-     *
-     * <p>Coût et notations : voir la documentation de la classe. Tous les char Java
-     * sont pris en charge, sans développer un point en 65 536 arcs.</p>
-     *
-     * @param nfa automate non nul, avec exactement un état initial
-     * @return nouveau graphe sans ε ni chevauchement d'étiquettes sortantes
-     * @throws NullPointerException si nfa est nul
-     * @throws IllegalArgumentException si aucun état initial n'existe
-     * @throws IllegalStateException si plusieurs états sont initiaux
+     * Construit un DFA partiel reconnaissant les mêmes mots entiers que le NFA.
+     * L'entrée n'est pas modifiée ; elle doit avoir exactement un état initial.
+     * @param nfa graphe non nul
+     * @return nouveau DFA sans ε, avec classes sortantes disjointes
      */
     public static Automaton convert(Automaton nfa) {
-        Objects.requireNonNull(nfa, "Le NFA ne doit pas être nul");
-        State initial = nfa.getInitialState();
-        if (initial == null) {
-            throw new IllegalArgumentException("Le NFA doit posséder un état initial");
-        }
+        return convert(nfa, false);
+    }
 
-        // Index calculé une seule fois ; getOutgoingTransitions reparcourrait tous les arcs.
-        Map<State, List<Transition>> outgoing = new HashMap<>();
-        // Lettres séparées explicitement ; les exclusions des ANY y participent aussi.
-        Set<Character> alphabet = new LinkedHashSet<>();
-        boolean hasAny = false;
-        for (Transition transition : nfa.getTransitions()) {
-            outgoing.computeIfAbsent(transition.getSource(), key -> new ArrayList<>()).add(transition);
-            if (transition.getType() == Transition.Type.CHARACTER) {
-                alphabet.add(transition.getSymbol());
-            } else if (transition.getType() == Transition.Type.ANY) {
-                hasAny = true;
-                alphabet.addAll(transition.getExcludedSymbols());
-            }
-        }
-        // Copie immuable commune aux arcs « autres caractères » du résultat.
-        Set<Character> exclusions = Set.copyOf(alphabet);
-        List<Character> representatives = new ArrayList<>(alphabet);
-        if (hasAny) {
-            // Tous les char hors alphabet ont le même comportement dans le NFA.
-            for (int code = Character.MIN_VALUE; code <= Character.MAX_VALUE; code++) {
-                if (!alphabet.contains((char) code)) {
-                    representatives.add((char) code);
-                    break;
-                }
-            }
-        }
+    /**
+     * Construit directement un DFA destiné à détecter une occurrence.
+     * Après chaque caractère, la fermeture initiale est réinjectée : tous les
+     * départs du motif sont suivis simultanément, sans déterminisation préalable.
+     * Les sous-ensembles acceptants partagent un état terminal sans arcs sortants.
+     *
+     * <p>Le consommateur doit s'arrêter au PREMIER état final, y compris avant
+     * lecture. Ce graphe n'est pas destiné à la reconnaissance de mots entiers.
+     * Un motif nullable donne immédiatement un seul état initial/final.</p>
+     * @param nfa automate du motif, déterministe ou non
+     * @return automate de recherche, sans modifier l'entrée
+     */
+    public static Automaton forSearch(Automaton nfa) {
+        return convert(nfa, true);
+    }
 
-        Automaton dfa = new Automaton();
-        // Les clés sont immuables : leur hachage reste stable pendant la construction.
-        Map<Set<State>, State> known = new HashMap<>();
-        Queue<Set<State>> pending = new ArrayDeque<>();
-        Set<State> startSet = epsilonClosure(outgoing, Set.of(initial));
-        register(dfa, known, pending, startSet, true);
+    private record Pending(BitSet subset, State state) {
+    }
 
+    private static Automaton convert(Automaton nfa, boolean searching) {
+        IndexedNfa input = new IndexedNfa(Objects.requireNonNull(nfa, "Le NFA ne doit pas être nul"));
+        BitSet start = new BitSet();
+        start.set(input.initial);
+        input.close(start);
+        Automaton result = new Automaton();
+        boolean nullable = start.intersects(input.finals);
+        State first = new State("D0", nullable ? Status.ENTER_FINAL : Status.ENTER);
+        result.addState(first);
+        if (searching && nullable) {
+            return result;
+        }
+        Map<BitSet, State> known = new HashMap<>();
+        Queue<Pending> pending = new ArrayDeque<>();
+        known.put(start, first);
+        pending.add(new Pending(start, first));
+        State found = null;
         while (!pending.isEmpty()) {
-            Set<State> current = pending.remove();
-            State source = known.get(current);
+            Pending current = pending.remove();
+            Alphabet alphabet = input.alphabet(current.subset());
+            List<Character> representatives = new ArrayList<>(alphabet.explicit());
+            if (searching || alphabet.any()) {
+                for (int code = Character.MIN_VALUE; code <= Character.MAX_VALUE; code++) {
+                    if (!alphabet.explicit().contains((char) code)) {
+                        representatives.add((char) code);
+                        break;
+                    }
+                }
+            }
+            Set<Character> exclusions = Set.copyOf(alphabet.explicit());
             for (char symbol : representatives) {
-                Set<State> next = epsilonClosure(outgoing, move(outgoing, current, symbol));
+                BitSet next = input.move(current.subset(), symbol);
+                input.close(next);
+                if (searching) {
+                    next.or(start);
+                }
                 if (next.isEmpty()) {
-                    continue; // DFA partiel : l'ensemble vide correspond à un rejet.
+                    continue;
                 }
-                State destination = register(dfa, known, pending, next, false);
-                dfa.add(alphabet.contains(symbol)
-                        ? new Transition(source, destination, symbol)
-                        : Transition.anyExcept(source, destination, exclusions));
-            }
-        }
-        return dfa;
-    }
-
-    /**
-     * Suit tous les arcs ε accessibles, en visitant chaque état au plus une fois.
-     * Les cycles ε terminent grâce à l'ensemble des états déjà vus.
-     *
-     * @param outgoing index des arcs par source
-     * @param seeds états de départ
-     * @return fermeture immuable ; temps O(N + E), mémoire O(N) au pire
-     */
-    private static Set<State> epsilonClosure(Map<State, List<Transition>> outgoing, Set<State> seeds) {
-        Set<State> result = new LinkedHashSet<>(seeds);
-        Deque<State> stack = new ArrayDeque<>(seeds);
-        while (!stack.isEmpty()) {
-            State state = stack.pop();
-            for (Transition transition : outgoing.getOrDefault(state, List.of())) {
-                if (transition.isEpsilon() && result.add(transition.getDestination())) {
-                    stack.push(transition.getDestination());
+                boolean accepting = next.intersects(input.finals);
+                State destination;
+                if (searching && accepting) {
+                    if (found == null) {
+                        found = new State("found", Status.FINAL);
+                        result.addState(found);
+                    }
+                    destination = found;
+                } else {
+                    destination = known.get(next);
+                    if (destination == null) {
+                        destination = new State("D" + known.size(), accepting ? Status.FINAL : Status.INTERMEDIATE);
+                        known.put(next, destination);
+                        pending.add(new Pending(next, destination));
+                        result.addState(destination);
+                    }
                 }
-            }
-        }
-        return Set.copyOf(result);
-    }
-
-    /**
-     * Réunit toutes les destinations possibles après la lecture d'un char.
-     * Les arcs ANY compatibles contribuent même si un arc littéral existe.
-     *
-     * @param outgoing index des arcs par source
-     * @param current ensemble actuellement représenté
-     * @param symbol caractère représentatif de la classe à lire
-     * @return destinations avant fermeture ε ; temps O(N + E), mémoire O(N) au pire
-     */
-    private static Set<State> move(Map<State, List<Transition>> outgoing, Set<State> current, char symbol) {
-        Set<State> result = new LinkedHashSet<>();
-        for (State state : current) {
-            for (Transition transition : outgoing.getOrDefault(state, List.of())) {
-                if (transition.matches(symbol)) {
-                    result.add(transition.getDestination());
-                }
+                result.add(alphabet.explicit().contains(symbol)
+                        ? new Transition(current.state(), destination, symbol)
+                        : Transition.anyExcept(current.state(), destination, exclusions));
             }
         }
         return result;
     }
 
-    /**
-     * Réutilise un état connu ou programme le traitement d'un nouvel ensemble.
-     * Coût moyen O(N) : hachage de l'ensemble et lecture de ses statuts finaux.
-     *
-     * @param dfa graphe en construction
-     * @param known association entre ensembles immuables et états du résultat
-     * @param pending ensembles dont les arcs restent à construire
-     * @param represented ensemble immuable à enregistrer
-     * @param initial vrai uniquement pour l'ensemble initial
-     * @return état existant ou nouvel état ajouté au graphe
-     */
-    private static State register(Automaton dfa, Map<Set<State>, State> known,
-            Queue<Set<State>> pending, Set<State> represented, boolean initial) {
-        State existing = known.get(represented);
-        if (existing != null) {
-            return existing;
+    /** Partition locale : les lettres inutiles dans cet état ne créent aucun arc. */
+    private record Alphabet(Set<Character> explicit, boolean any) {
+    }
+
+    private record Wildcard(int destination, Set<Character> excluded) {
+    }
+
+    private static final class Row {
+        private final List<Integer> epsilon = new ArrayList<>();
+        private final Map<Character, List<Integer>> characters = new HashMap<>();
+        private final List<Wildcard> others = new ArrayList<>();
+    }
+
+    /** Index temporaire ; les identifiants entiers sont locaux à cette conversion. */
+    private static final class IndexedNfa {
+        private final Row[] rows;
+        private final int[] stack;
+        private final int initial;
+        private final BitSet finals = new BitSet();
+
+        private IndexedNfa(Automaton nfa) {
+            State start = nfa.getInitialState();
+            if (start == null) {
+                throw new IllegalArgumentException("Le NFA doit posséder un état initial");
+            }
+            Map<State, Integer> ids = new HashMap<>();
+            rows = new Row[nfa.getStates().size()];
+            stack = new int[rows.length];
+            for (State state : nfa.getStates()) {
+                int id = ids.size();
+                ids.put(state, id);
+                rows[id] = new Row();
+                if (state.getStatus().isFinal()) {
+                    finals.set(id);
+                }
+            }
+            initial = ids.get(start);
+            for (Transition transition : nfa.getTransitions()) {
+                Row row = rows[ids.get(transition.getSource())];
+                int destination = ids.get(transition.getDestination());
+                switch (transition.getType()) {
+                    case EPSILON -> row.epsilon.add(destination);
+                    case CHARACTER -> {
+                        char symbol = transition.getSymbol();
+                        row.characters.computeIfAbsent(symbol, key -> new ArrayList<>()).add(destination);
+                    }
+                    case ANY -> {
+                        Set<Character> excluded = transition.getExcludedSymbols();
+                        row.others.add(new Wildcard(destination, excluded));
+                    }
+                }
+            }
         }
-        boolean accepting = represented.stream().anyMatch(state -> state.getStatus().isFinal());
-        Status status = initial ? (accepting ? Status.ENTER_FINAL : Status.ENTER)
-                : (accepting ? Status.FINAL : Status.INTERMEDIATE);
-        State created = new State("D" + known.size(), status);
-        known.put(represented, created);
-        pending.add(represented);
-        dfa.addState(created);
-        return created;
+
+        private Alphabet alphabet(BitSet current) {
+            Set<Character> explicit = new LinkedHashSet<>();
+            boolean any = false;
+            for (int state = current.nextSetBit(0); state >= 0; state = current.nextSetBit(state + 1)) {
+                Row row = rows[state];
+                explicit.addAll(row.characters.keySet());
+                for (Wildcard arc : row.others) {
+                    any = true;
+                    explicit.addAll(arc.excluded());
+                }
+            }
+            return new Alphabet(explicit, any);
+        }
+
+        private BitSet move(BitSet current, char symbol) {
+            BitSet next = new BitSet();
+            for (int state = current.nextSetBit(0); state >= 0; state = current.nextSetBit(state + 1)) {
+                Row row = rows[state];
+                List<Integer> destinations = row.characters.get(symbol);
+                if (destinations != null) {
+                    for (int destination : destinations) {
+                        next.set(destination);
+                    }
+                }
+                for (Wildcard arc : row.others) {
+                    if (!arc.excluded().contains(symbol)) {
+                        next.set(arc.destination());
+                    }
+                }
+            }
+            return next;
+        }
+
+        /** Ferme un nouvel ensemble en place ; chaque état est empilé au plus une fois. */
+        private void close(BitSet states) {
+            int size = 0;
+            for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
+                stack[size++] = state;
+            }
+            while (size > 0) {
+                for (int destination : rows[stack[--size]].epsilon) {
+                    if (!states.get(destination)) {
+                        states.set(destination);
+                        stack[size++] = destination;
+                    }
+                }
+            }
+        }
     }
 }

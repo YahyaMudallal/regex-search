@@ -6,7 +6,7 @@ Le chemin le plus court consiste à vérifier les outils, lancer les tests, puis
 
 ## 1. Environnement de travail
 
-Le projet est compilé pour Java 25. Il faut un **JDK complet** : une installation qui fournit seulement l’exécution de Java ne suffit pas, puisque Maven appelle aussi le compilateur. Les scripts utilisent le JDK désigné par `JAVA_HOME`. Si cette variable n’est pas définie, ils récupèrent le répertoire du `java` présent dans le `PATH`.
+Le projet est compilé pour Java 21. Il faut un **JDK complet** : une installation qui fournit seulement l’exécution de Java ne suffit pas, puisque Maven appelle aussi le compilateur. Les scripts utilisent le JDK désigné par `JAVA_HOME`. Si cette variable n’est pas définie, ils récupèrent le répertoire du `java` présent dans le `PATH`.
 
 ```bash
 java -version
@@ -15,7 +15,7 @@ mvn --version
 python3 --version
 ```
 
-Les versions minimales attendues sont Java 25, Maven 3.6.3 et Python 3.9. Le POM déclare JUnit 6.1.3, Maven Compiler Plugin 3.14.0, Surefire 3.5.3 et Maven JAR Plugin 3.4.2. Ces versions sont celles du dépôt ; elles ne constituent pas une recommandation générale d’utiliser la version la plus récente de chaque outil.
+Les versions minimales attendues sont Java 21, Maven 3.6.3 et Python 3.9. Le POM déclare JUnit 6.1.3, Maven Compiler Plugin 3.14.0, Surefire 3.5.3 et Maven JAR Plugin 3.4.2. Ces versions sont celles du dépôt ; elles ne constituent pas une recommandation générale d’utiliser la version la plus récente de chaque outil.
 
 Bash orchestre les commandes. Python ne participe pas à la recherche du motif : sa bibliothèque standard sert à chronométrer les processus, vérifier leurs sorties et calculer les statistiques. Sous Windows, un environnement Linux tel que WSL permet d’utiliser les scripts Bash ; la campagne publiée a été exécutée sous macOS arm64.
 
@@ -85,17 +85,20 @@ Les trois arguments sont le chemin du fichier, l’expression régulière et une
 | :---------- | :----------------------------------------------------------------------------- |
 | `AUTO`      | Analyse l’arbre et choisit KMP si le motif est une concaténation de lettres    |
 | `KMP`       | Impose KMP ; une expression non littérale est refusée                          |
-| `AUTOMATON` | Impose NFA → DFA → DFAM → préparation de la recherche, même pour un mot simple |
+| `DFA` | Impose le DFA de recherche sans minimisation |
+| `DFAM` | Applique Hopcroft au même DFA avant indexation |
+| `AUTOMATON` | Alias du chemin DFAM, conservé pour compatibilité |
 
 ```bash
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' KMP
-./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' AUTOMATON
+./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' DFA
+./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' DFAM
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Eli.*beth'
 ```
 
 Le script compile avant le lancement. Cette compilation n’entre pas dans les durées affichées. La mesure Java comprend l’analyse du motif, les étapes de préparation exécutées et le parcours du fichier. Le démarrage de la JVM n’appartient pas au chronomètre interne de `Benchmark`.
 
-La sortie indique le moteur choisi, le nombre total de lignes et le nombre de lignes correspondantes. Elle décompose aussi la préparation. La durée de DFAM ne représente, pour le moment, qu’un appel retournant la même référence d’automate.
+La sortie indique le moteur choisi, le nombre total de lignes et le nombre de lignes correspondantes. Elle décompose aussi la préparation. La durée de DFAM mesure Hopcroft ; elle vaut exactement zéro pour la stratégie DFA et pour le raccourci des motifs acceptant le mot vide.
 
 ### Appeler directement Main
 
@@ -148,22 +151,65 @@ Les expressions utilisent le sous-ensemble commun décrit au [chapitre 2](02-con
 ## 5. Reproduire toute la campagne du rapport
 
 ```bash
-./run.sh
-./scripts/report-campaign.sh target/rapport-reproduction --runs 20
+# Campagne de référence : l'arbre Git doit être propre.
+./scripts/report-campaign.sh
+
+# Même campagne puis suppression des CSV/TXT générés localement.
+./scripts/report-campaign.sh --purge
+
+# Essai de développement : résultats locaux uniquement, aucun remplacement de docs/assets/.
+./scripts/report-campaign.sh --allow-dirty
+
+# Avec le cache Maven déjà rempli :
+MAVEN_OFFLINE=1 ./scripts/report-campaign.sh
 ```
 
-La campagne exécute dix expériences en série. Elle recrée deux corpus dérivés, en répétant le livre huit et trente-deux fois, dans `target/report-corpora/`. Les empreintes des sources et la configuration sont conservées dans `campaign.json`. Les répétitions modifient le volume, pas la diversité linguistique du texte.
+Les paramètres de mesure sont figés dans [`scripts/report-profile.json`](../scripts/report-profile.json). La campagne de référence exige **Java 21**, **Python 3.12 ou supérieur**, GNU grep et une locale UTF-8. L'environnement de tracé est mis en cache dans `.cache/report-venv/`, donc il ne pollue ni l'archive de rendu ni les fichiers suivis par Git.
 
-Pour régénérer les figures, utiliser **Python 3.11 ou supérieur** avec Matplotlib 3.11.2, une dépendance de visualisation distincte :
+Le protocole suit sept phases ordonnées :
+
+1. vérifier Git et les prérequis, nettoyer les sorties locales, compiler et lancer les tests ;
+2. reconstruire les corpus dérivés puis vérifier leur empreinte ;
+3. comparer **octet par octet** les sorties numérotées Java et `grep -E -n` ;
+4. compter hors chronométrage les états/transitions du NFA, du DFA de recherche et du DFAM ;
+5. mesurer les commandes complètes avec ordre équilibré ;
+6. mesurer les phases dans plusieurs JVM indépendantes puis recalculer les résumés ;
+7. tracer, vérifier les empreintes, publier `docs/assets/` atomiquement et supprimer les fichiers temporaires.
+
+| Sortie locale, ignorée par Git | Contenu |
+| :--- | :--- |
+| `target/report/results/report.md` | Regex développées, statistiques, structure des automates et limites |
+| `target/report/results/campaign.json` | Paramètres, Git HEAD/dirty, versions, commandes, empreintes et contrôles |
+| `target/report/results/automata.csv` | Longueur de regex, états/arcs NFA, DFA de recherche et DFAM |
+| `target/report/results/cli.csv`, `jvm.csv` | Toutes les observations, y compris les prépassages |
+| `target/report/results/*-summary.csv` | Statistiques recalculables depuis les observations |
+| `target/report/results/validation.txt` | Sortie des tests Java/Python |
+| `docs/assets/` | Six SVG, `benchmark.md` et `benchmark.json` utilisés directement par les Markdown |
+
+La publication est transactionnelle : les assets existants ne sont remplacés qu'après validation complète. Un échec conserve donc la référence précédente. `--allow-dirty` garde les résultats locaux sans publication automatique ; une publication explicite par `freeze-report.sh` reste possible après vérification des sources et des figures. `--purge` supprime les CSV et TXT **après** la publication ; `benchmark.md`, `benchmark.json`, les SVG et le rapport local restent disponibles.
+
+Le profil compare 32 cas Java en DFA/DFAM, avec KMP ajouté aux littéraux. GNU grep est le témoin externe pour les 30 cas CLI. Voir les [regex et le protocole](05-experiences.md).
+
+Pour retracer manuellement une campagne locale non purgée :
 
 ```bash
-python3 -m venv /tmp/regex-report-venv
-/tmp/regex-report-venv/bin/python -m pip install -r scripts/requirements-report.txt
-MPLCONFIGDIR=/tmp/regex-report-mpl /tmp/regex-report-venv/bin/python \
-  scripts/plot-report.py target/rapport-reproduction --output target/rapport-figures
+.cache/report-venv/bin/python scripts/plot-report.py
+./scripts/freeze-report.sh   # alias historique : republie la dernière campagne validée
 ```
 
-Cette installation est optionnelle. Elle ne modifie ni le POM ni les dépendances du moteur. Les SVG publiés dans `docs/assets/` se lisent directement dans le dépôt.
+Pour nettoyer toutes les sorties locales sans toucher aux assets publiés :
+
+```bash
+./scripts/clean-report.sh
+```
+
+Pour produire le rendu final avec le JAR et une archive minimale :
+
+```bash
+./scripts/package.sh
+```
+
+Le packaging exige un arbre Git propre, prend uniquement les fichiers suivis par Git, ajoute `regex-search.jar`, crée une archive déterministe et refuse un ZIP supérieur à 10 Mio. `.git`, `target`, environnements Python, caches et fichiers IDE sont exclus par construction.
 
 ## 6. Diagnostic rapide
 

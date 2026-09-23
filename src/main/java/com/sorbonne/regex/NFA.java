@@ -1,7 +1,8 @@
 package com.sorbonne.regex;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Objects;
-import java.util.Set;
 
 import com.sorbonne.automata.Automaton;
 import com.sorbonne.automata.State;
@@ -9,255 +10,95 @@ import com.sorbonne.automata.Status;
 import com.sorbonne.automata.Transition;
 
 /**
- * Fabrique construisant un automate non déterministe avec transitions epsilon
- * (epsilon-NFA)
- * à partir d'un arbre syntaxique abstrait, suivant la construction d'Aho-Ullman
- * (Chapitre 10).
+ * Construction de Thompson/Aho-Ullman dans un graphe commun.
+ * Chaque nœud ajoute O(1) états/arcs : O(m) temps moyen et mémoire pour m nœuds.
+ * Le parcours postordre est itératif, y compris pour les arbres déséquilibrés.
  */
 public class NFA {
+    private final Automaton automaton = new Automaton();
+    private int stateCounter;
 
-    private int stateCounter = 0;
+    /** Extrémités d'un fragment ; aucun sous-graphe n'est recopié. */
+    private record Fragment(State start, State accept) {
+    }
+
+    private record Visit(SyntaxTree tree, boolean expanded) {
+    }
 
     /**
-     * Point d'entrée pour convertir un arbre syntaxique en automate avec
-     * transitions epsilon.
-     *
-     * @param tree l'arbre syntaxique racine, non nul
-     * @return un automate équivalent possédant un unique état initial (ENTER)
-     *         et un unique état d'acceptation (FINAL)
+     * @param tree arbre non nul
+     * @return graphe indépendant, avec une unique entrée et une unique sortie
      */
     public static Automaton buildNFA(SyntaxTree tree) {
         Objects.requireNonNull(tree, "L'arbre syntaxique ne peut pas être nul");
-        NFA builder = new NFA();
-        return builder.build(tree);
+        return new NFA().build(tree);
     }
 
-    /**
-     * Construction par récursion structurelle sur les noeuds de l'arbre.
-     * 
-     * @param tree l'arbre syntaxique racine, non nul.
-     * @return l'automate NFA correspondant.
-     */
     private Automaton build(SyntaxTree tree) {
-        NodeType type = tree.getNodeType();
-
-        switch (type) {
-            case LETTER -> {
-                return buildLeaf(tree.getLetter().charAt(0));
+        Deque<Visit> visits = new ArrayDeque<>();
+        Deque<Fragment> fragments = new ArrayDeque<>();
+        visits.push(new Visit(tree, false));
+        while (!visits.isEmpty()) {
+            Visit visit = visits.pop();
+            SyntaxTree node = visit.tree();
+            NodeType type = node.getNodeType();
+            if (!visit.expanded()) {
+                switch (type) {
+                    case LETTER, DOT -> {
+                        State start = createState();
+                        State accept = createState();
+                        automaton.add(type == NodeType.DOT ? Transition.any(start, accept)
+                                : new Transition(start, accept, node.getLetter().charAt(0)));
+                        fragments.push(new Fragment(start, accept));
+                    }
+                    case CONCATENATION, ALTERNATION, STAR, PROTECTION -> {
+                        visits.push(new Visit(node, true));
+                        if (type == NodeType.CONCATENATION || type == NodeType.ALTERNATION) {
+                            visits.push(new Visit(Objects.requireNonNull(node.getRight()), false));
+                        }
+                        visits.push(new Visit(Objects.requireNonNull(node.getLeft()), false));
+                    }
+                    default -> throw new IllegalArgumentException("Type de nœud non supporté : " + type);
+                }
+                continue;
             }
-
-            case DOT -> {
-                return buildAnyLeaf();
+            if (type == NodeType.PROTECTION) {
+                continue;
             }
-
-            case CONCATENATION -> {
-                return buildConcatenation(build(tree.getLeft()), build(tree.getRight()));
+            Fragment right = fragments.pop();
+            if (type == NodeType.CONCATENATION) {
+                Fragment left = fragments.pop();
+                epsilon(left.accept(), right.start());
+                fragments.push(new Fragment(left.start(), right.accept()));
+            } else {
+                State start = createState();
+                State accept = createState();
+                epsilon(start, right.start());
+                epsilon(right.accept(), accept);
+                if (type == NodeType.STAR) {
+                    epsilon(start, accept);
+                    epsilon(right.accept(), right.start());
+                } else {
+                    Fragment left = fragments.pop();
+                    epsilon(start, left.start());
+                    epsilon(left.accept(), accept);
+                }
+                fragments.push(new Fragment(start, accept));
             }
-
-            case ALTERNATION -> {
-                return buildAlternation(build(tree.getLeft()), build(tree.getRight()));
-            }
-
-            case STAR -> {
-                return buildStar(build(tree.getLeft()));
-            }
-
-            case PROTECTION -> {
-                // Le noeud PROTECTION est une enveloppe transparente pour le sous-arbre gauche
-                return build(tree.getLeft());
-            }
-
-            default -> throw new IllegalArgumentException("Type de noeud non supporté pour la conversion : " + type);
         }
-    }
-
-    // =========================================================================
-    // CAS DE BASE, les feuilles (caractères ou point)
-    // =========================================================================
-
-    /**
-     * Crée l'automate pour un caractère littéral : (start) --'c'--> ((final))
-     * 
-     * @param symbol La lette à crée l'automate.
-     * @return L'automate correspondant.
-     */
-    private Automaton buildLeaf(char symbol) {
-        Automaton automaton = new Automaton();
-        State start = createState(Status.ENTER);
-        State accept = createState(Status.FINAL);
-
-        automaton.add(new Transition(start, accept, symbol));
+        Fragment result = fragments.pop();
+        result.start().setStatus(Status.ENTER);
+        result.accept().setStatus(Status.FINAL);
         return automaton;
     }
 
-    /**
-     * Crée l'automate pour le point universel (any) : (start) --ANY--> ((final))
-     */
-    private Automaton buildAnyLeaf() {
-        Automaton automaton = new Automaton();
-        State start = createState(Status.ENTER);
-        State accept = createState(Status.FINAL);
-
-        automaton.add(Transition.any(start, accept));
-        return automaton;
+    private State createState() {
+        State state = new State("q" + stateCounter++, Status.INTERMEDIATE);
+        automaton.addState(state);
+        return state;
     }
 
-    // =========================================================================
-    // CAS INDUCTIFS
-    // =========================================================================
-
-    /**
-     * Concaténation de deux sous-automates A1 et A2 (Fig 10.28(b)):'
-     * On relie l'état final de A1 à l'état initial de A2 par une
-     * transition-epsilon.
-     * 
-     * @param a1 un automate à concatener
-     * @param a2 un automate à concatener
-     * @return l'automate final.
-     */
-    private Automaton buildConcatenation(Automaton a1, Automaton a2) {
-        State accept1 = getUniqueFinalState(a1);
-        State start2 = a2.getInitialState();
-
-        // L'acceptant de A1 et l'initial de A2 deviennent des états intermédiaires
-        accept1.setStatus(Status.INTERMEDIATE);
-        start2.setStatus(Status.INTERMEDIATE);
-
-        // creation du nouvel automate resultant
-        Automaton result = new Automaton();
-        mergeInto(result, a1);
-        mergeInto(result, a2);
-
-        // Transition epsilon entre la fin de A1 et le début de A2
-        result.add(new Transition(accept1, start2));
-
-        return result;
-    }
-
-    /**
-     * Alternance (Union) de deux sous-automates A1 et A2 (Fig. 10.28(a)) :
-     * Nouvel état initial avec transitions-epsilon vers les débuts de A1 et A2.
-     * Transitions-epsilon depuis les fins de A1 et A2 vers le nouvel état final.
-     * 
-     * Concaténation de deux sous-automates A1 et A2 (Fig 10.28(b)):'
-     * On relie l'état final de A1 à l'état initial de A2 par une
-     * transition-epsilon.
-     * 
-     * @param a1 un automate à alterner
-     * @param a2 un automate à alterner
-     * @return l'automate final.
-     */
-    private Automaton buildAlternation(Automaton a1, Automaton a2) {
-        State start1 = a1.getInitialState();
-        State accept1 = getUniqueFinalState(a1);
-        State start2 = a2.getInitialState();
-        State accept2 = getUniqueFinalState(a2);
-
-        // Tous les anciens états début/fin deviennent intermédiaires
-        start1.setStatus(Status.INTERMEDIATE);
-        accept1.setStatus(Status.INTERMEDIATE);
-        start2.setStatus(Status.INTERMEDIATE);
-        accept2.setStatus(Status.INTERMEDIATE);
-
-        // nouvelles états initial et final
-        State newStart = createState(Status.ENTER);
-        State newAccept = createState(Status.FINAL);
-
-        // creation du nouvel automate resultant
-        Automaton result = new Automaton();
-        mergeInto(result, a1);
-        mergeInto(result, a2);
-
-        // Branchements depuis newStart
-        result.add(new Transition(newStart, start1));
-        result.add(new Transition(newStart, start2));
-
-        // Ralliements vers newAccept
-        result.add(new Transition(accept1, newAccept));
-        result.add(new Transition(accept2, newAccept));
-
-        return result;
-    }
-
-    /**
-     * Étoile de Kleene d'un sous-automate A1 (Fig. 10.28(c)) :
-     * Crée un nouveau début et une nouvelle fin reliés entre eux par epsilon (mot
-     * vide).
-     * Ajoute une transition-epsilon arrière de la fin vers le début pour la boucle.
-     * 
-     * @param a1 automate à mettre sous etoile.
-     * @return l'automate sous etoile.
-     */
-    private Automaton buildStar(Automaton a1) {
-        State oldStart = a1.getInitialState();
-        State oldAccept = getUniqueFinalState(a1);
-
-        // les anciens état final/inital ne le sont plus
-        oldStart.setStatus(Status.INTERMEDIATE);
-        oldAccept.setStatus(Status.INTERMEDIATE);
-
-        // creation des nouveaux états final/initial
-        State newStart = createState(Status.ENTER);
-        State newAccept = createState(Status.FINAL);
-
-        // creation du nouvel automate resultant
-        Automaton result = new Automaton();
-        mergeInto(result, a1);
-
-        // Court-circuit mot vide (0 occurrence)
-        result.add(new Transition(newStart, newAccept));
-        // Entrée dans le motif
-        result.add(new Transition(newStart, oldStart));
-        // Boucle arrière pour répéter le motif (1 ou plusieurs occurrences)
-        result.add(new Transition(oldAccept, oldStart));
-        // Sortie du motif
-        result.add(new Transition(oldAccept, newAccept));
-
-        return result;
-    }
-
-    // =========================================================================
-    // UTILITAIRES
-    // =========================================================================
-
-    /**
-     * Crée un nouvel état avec un label unique q0, q1, ...
-     * 
-     * @param status Le status de l'état (ENTER, FINAL, ...)
-     * @return L'etat crée.
-     */
-    private State createState(Status status) {
-        return new State("q" + (stateCounter++), status);
-    }
-
-    /**
-     * Copie tous les états et toutes les transitions d'une source vers une cible.
-     * 
-     * @param target
-     * @param source
-     */
-    private void mergeInto(Automaton target, Automaton source) {
-        for (State state : source.getStates()) {
-            target.addState(state);
-        }
-        for (Transition transition : source.getTransitions()) {
-            target.add(transition);
-        }
-    }
-
-    /**
-     * Récupère l'unique état final de l'automate construit selon le pattern
-     * inductif du livre.
-     * 
-     * @param automaton L'automate à recuperer l'état final.
-     * @return L'etat final.
-     */
-    private State getUniqueFinalState(Automaton automaton) {
-        Set<State> finalStates = automaton.getFinalStates();
-        if (finalStates.size() != 1) {
-            throw new IllegalStateException("L'automate sous-jacent doit avoir exactement un état final, trouvé : "
-                    + finalStates.size());
-        }
-        return finalStates.iterator().next();
+    private void epsilon(State source, State destination) {
+        automaton.add(new Transition(source, destination));
     }
 }

@@ -6,16 +6,16 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Predicate;
 
 import com.sorbonne.automata.Automaton;
 import com.sorbonne.regex.DFA;
-import com.sorbonne.regex.DFAMMoore;
+import com.sorbonne.regex.DFAMHopcroft;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
 import com.sorbonne.search.KMPSearch;
 import com.sorbonne.search.NativeSearch;
+import com.sorbonne.search.PreparedSearch;
 import com.sorbonne.utils.FileLoader;
 
 /**
@@ -24,10 +24,10 @@ import com.sorbonne.utils.FileLoader;
  * <p>
  * Le motif est une expression régulière du langage de {@link RegexParser},
  * pas un filtre de noms de fichiers. En mode automatique, une concaténation
- * de lettres utilise KMP ; les autres expressions passent par NFA, DFA,
- * {@link DFAMMoore#minimize(Automaton)} puis NativeSearch. La minimisation est
- * encore
- * une étape provisoire qui rend le même automate.
+ * de lettres utilise KMP ; les autres expressions passent directement du NFA
+ * au DFA de recherche. La stratégie DFA indexe directement ce graphe ; DFAM
+ * applique {@link DFAMHopcroft#minimize(Automaton)} avant la même indexation.
+ * AUTOMATON conserve le comportement historique avec minimisation.
  * </p>
  *
  * <p>
@@ -60,7 +60,11 @@ public final class Benchmark {
         /** Impose KMP ; refuse les expressions comportant un opérateur non littéral. */
         KMP,
         /** Impose les automates, y compris pour un motif littéral. */
-        AUTOMATON
+        AUTOMATON,
+        /** DFA de recherche sans minimisation. */
+        DFA,
+        /** DFA de recherche minimisé par Hopcroft. */
+        DFAM
     }
 
     /** Consommateur d'une ligne correspondante, avec son numéro dans le fichier. */
@@ -114,8 +118,7 @@ public final class Benchmark {
      * @param parsingNanos           analyse syntaxique
      * @param nfaNanos               construction du NFA, ou zéro avec KMP
      * @param dfaNanos               déterminisation, ou zéro avec KMP
-     * @param minimizationNanos      appel du placeholder DFAM, pas une véritable
-     *                               minimisation
+     * @param minimizationNanos      minimisation de Hopcroft du DFA de recherche
      * @param searchPreparationNanos table KMP ou préparation de la recherche par
      *                               automate
      * @param preparationNanos       préparation entière, incluant le choix du
@@ -154,10 +157,9 @@ public final class Benchmark {
      *
      * <p>
      * Pour C unités UTF-16 réparties sur L lignes, le parcours prend
-     * O(C + L) avec KMP, et en moyenne avec les tables de NativeSearch.
-     * La mémoire du parcours est O(B + M), où B est le tampon et M la longueur
-     * de la plus grande ligne, en plus du moteur préparé. KMP prépare sa table
-     * en O(m) ; le coût du parseur reste distinct. Les déterminisations peuvent
+     * O(C + L) avec les deux moteurs. Le comptage travaille par blocs en
+     * O(B) mémoire supplémentaire, indépendamment de la longueur des lignes.
+     * Le parseur et la préparation KMP sont O(m). La déterminisation peut
      * produire un nombre exponentiel d'états : la préparation par automate
      * n'est donc pas annoncée comme linéaire.
      * </p>
@@ -176,96 +178,84 @@ public final class Benchmark {
      */
     public Result pipeline() throws Exception {
         long start = System.nanoTime();
+        Preparation prepared = prepare();
+        long scanStart = System.nanoTime();
+        FileLoader.Counts counts = FileLoader.count(file, prepared.search().newCursor());
+        long end = System.nanoTime();
+        return new Result(file, pattern, prepared.strategy(), counts.totalLines(), counts.matchingLines(),
+                new Timings(prepared.parsingNanos(), prepared.nfaNanos(), prepared.dfaNanos(),
+                        prepared.minimizationNanos(), prepared.searchPreparationNanos(),
+                        scanStart - start, end - scanStart, end - start));
+    }
+
+    /**
+     * Affiche ou transmet les lignes sélectionnées. Contrairement au comptage,
+     * ce mode conserve une ligne entière afin de pouvoir en restituer le début.
+     */
+    public void forEachMatchingLine(LineConsumer consumer) throws Exception {
+        Objects.requireNonNull(consumer, "Le consommateur ne doit pas être nul");
+        PreparedSearch search = prepare().search();
+        try (BufferedReader reader = FileLoader.open(file)) {
+            long lineNumber = 0;
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                if (search.search(line)) {
+                    consumer.accept(lineNumber, line);
+                }
+            }
+        }
+    }
+
+    private record Preparation(PreparedSearch search, Strategy strategy, long parsingNanos,
+            long nfaNanos, long dfaNanos, long minimizationNanos, long searchPreparationNanos) {
+    }
+
+    /**
+     * Préparation commune aux modes comptage et affichage, exécutée une seule fois.
+     */
+    private Preparation prepare() throws Exception {
+        long start = System.nanoTime();
         SyntaxTree tree = RegexParser.parse(pattern);
         long parsingNanos = System.nanoTime() - start;
         Optional<String> literal = literalPattern(tree);
         Strategy selected = strategy == Strategy.AUTO
                 ? (literal.isPresent() ? Strategy.KMP : Strategy.AUTOMATON)
                 : strategy;
-
-        // Les étapes propres aux automates restent à zéro pour le chemin KMP.
         long nfaNanos = 0;
         long dfaNanos = 0;
         long minimizationNanos = 0;
+        long phaseStart = System.nanoTime();
         long searchPreparationNanos;
-        Predicate<String> search;
+        PreparedSearch search;
         if (selected == Strategy.KMP) {
             String word = literal.orElseThrow(
                     () -> new IllegalArgumentException("KMP exige une concaténation de caractères littéraux"));
-            long phaseStart = System.nanoTime();
-            KMPSearch.Prepared prepared = KMPSearch.prepare(word);
-            search = prepared::search;
+            search = KMPSearch.prepare(word);
+            searchPreparationNanos = System.nanoTime() - phaseStart;
+        } else if (tree.acceptsEmpty()) {
+            // Toute ligne, même vide, correspond ; aucun automate n'est nécessaire.
+            search = KMPSearch.prepare("");
             searchPreparationNanos = System.nanoTime() - phaseStart;
         } else {
-            long phaseStart = System.nanoTime();
+            phaseStart = System.nanoTime();
             Automaton nfa = NFA.buildNFA(tree);
             nfaNanos = System.nanoTime() - phaseStart;
             phaseStart = System.nanoTime();
-            Automaton dfa = DFA.convert(nfa);
+            Automaton dfa = DFA.forSearch(nfa);
             dfaNanos = System.nanoTime() - phaseStart;
             phaseStart = System.nanoTime();
-            // Automaton minimized = DFAMMoore.minimize(dfa, false);
-            minimizationNanos = System.nanoTime() - phaseStart;
+            Automaton minimized = dfa;
+            if (selected != Strategy.DFA) {
+                minimized = DFAMHopcroft.minimize(dfa);
+                minimizationNanos = System.nanoTime() - phaseStart;
+            }
             phaseStart = System.nanoTime();
-            NativeSearch.Prepared prepared = NativeSearch.prepare(dfa);
-            search = prepared::search;
+            search = NativeSearch.fromSearchDfa(minimized);
             searchPreparationNanos = System.nanoTime() - phaseStart;
         }
-
-        long scanStart = System.nanoTime();
-        long totalLines = 0;
-        long matchingLines = 0;
-        try (BufferedReader reader = FileLoader.open(file)) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                totalLines++;
-                if (search.test(line)) {
-                    matchingLines++;
-                }
-            }
-        }
-        long end = System.nanoTime();
-        return new Result(file, pattern, selected, totalLines, matchingLines,
-                new Timings(parsingNanos, nfaNanos, dfaNanos, minimizationNanos,
-                        searchPreparationNanos, scanStart - start, end - scanStart, end - start));
-    }
-
-    /**
-     * Parcourt le fichier et transmet chaque ligne correspondante au consommateur.
-     * Le motif est préparé une seule fois et les lignes ne sont jamais accumulées.
-     * 
-     * @param consumer traitement d'une ligne correspondante et de son numéro
-     * @throws Exception si le motif, le fichier ou le consommateur échoue
-     */
-    public void forEachMatchingLine(LineConsumer consumer) throws Exception {
-        Objects.requireNonNull(consumer, "Le consommateur ne doit pas être nul");
-        SyntaxTree tree = RegexParser.parse(pattern);
-        Optional<String> literal = literalPattern(tree);
-        Strategy selected = strategy == Strategy.AUTO
-                ? (literal.isPresent() ? Strategy.KMP : Strategy.AUTOMATON)
-                : strategy;
-        Predicate<String> search;
-        if (selected == Strategy.KMP) {
-            String word = literal.orElseThrow(
-                    () -> new IllegalArgumentException("KMP exige une concaténation de caractères littéraux"));
-            search = KMPSearch.prepare(word)::search;
-        } else {
-            Automaton nfa = NFA.buildNFA(tree);
-            Automaton dfa = DFA.convert(nfa);
-            // Automaton minimized = DFAMMoore.minimize(dfa, false);
-            search = NativeSearch.prepare(dfa)::search;
-        }
-
-        try (BufferedReader reader = FileLoader.open(file)) {
-            long lineNumber = 0;
-            String line;
-            while ((line = reader.readLine()) != null) {
-                lineNumber++;
-                if (search.test(line)) {
-                    consumer.accept(lineNumber, line);
-                }
-            }
-        }
+        return new Preparation(search, selected, parsingNanos, nfaNanos, dfaNanos,
+                minimizationNanos, searchPreparationNanos);
     }
 
     /**

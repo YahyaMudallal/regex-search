@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.parallel.ResourceLock;
@@ -34,7 +33,7 @@ class MainTest {
     @Test
     void countModePrintsOnlyMatchingLineCount() throws Exception {
         Path file = Files.writeString(directory.resolve("texte avec espaces.txt"), "ab ab\nx\nab");
-        for (String strategy : new String[] { "AUTO", "KMP", "AUTOMATON" }) {
+        for (String strategy : new String[] { "AUTO", "KMP", "DFA", "DFAM", "AUTOMATON" }) {
             assertEquals("2" + System.lineSeparator(), capture("--count", file.toString(), "ab", strategy));
         }
     }
@@ -52,14 +51,45 @@ class MainTest {
         assertEquals("0" + System.lineSeparator(), capture("--count", file.toString(), "a"));
     }
 
+    /** L'aide CLI doit être accessible sans fichier ni compilation de benchmark. */
+    @Test
+    void helpDescribesModesAndStrategies() throws Exception {
+        String help = capture("--help");
+        org.junit.jupiter.api.Assertions.assertTrue(help.contains("--count"));
+        org.junit.jupiter.api.Assertions.assertTrue(help.contains("--print"));
+        org.junit.jupiter.api.Assertions.assertTrue(help.contains("AUTOMATON"));
+    }
+
     /**
      * Vérifie qu'une commande incomplète n'est pas exécutée comme une
      * démonstration.
      */
     @Test
-    @SuppressWarnings({ "ThrowableResultIgnored", "ThrowableResultOfMethodCallIgnored" })
     void countModeRequiresFileAndPattern() {
-        assertThrows(IllegalArgumentException.class, () -> Main.main(new String[] { "--count" }));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ByteArrayOutputStream errors = new ByteArrayOutputStream();
+        try (PrintStream out = new PrintStream(output, true, StandardCharsets.UTF_8);
+                PrintStream err = new PrintStream(errors, true, StandardCharsets.UTF_8)) {
+            assertEquals(2, Main.runCommand(new String[] { "--count" }, out, err));
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(errors.toString(StandardCharsets.UTF_8).contains("Usage :"));
+        assertEquals("", output.toString(StandardCharsets.UTF_8));
+    }
+
+    /** Les erreurs CLI attendues restent concises et ne produisent pas de stack trace. */
+    @Test
+    void invalidStrategyReturnsUsageError() {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ByteArrayOutputStream errors = new ByteArrayOutputStream();
+        try (PrintStream out = new PrintStream(output, true, StandardCharsets.UTF_8);
+                PrintStream err = new PrintStream(errors, true, StandardCharsets.UTF_8)) {
+            assertEquals(2, Main.runCommand(new String[] { "fichier.txt", "abc", "INCONNUE" }, out, err));
+        }
+        String message = errors.toString(StandardCharsets.UTF_8);
+        org.junit.jupiter.api.Assertions.assertTrue(message.contains("Stratégie inconnue"));
+        org.junit.jupiter.api.Assertions.assertTrue(message.contains("AUTO, KMP, DFA, DFAM, AUTOMATON"));
+        org.junit.jupiter.api.Assertions.assertFalse(message.contains("Exception"));
+        assertEquals("", output.toString(StandardCharsets.UTF_8));
     }
 
     /**
