@@ -49,20 +49,21 @@ class RegexScalingTest {
     }
 
     @Test
-    void handlesLargeAlphabetWithoutDenseStateByAlphabetExpansion() throws Exception {
-        StringBuilder word = new StringBuilder();
-        for (int i = 0x100; i < 0x700; i++) {
-            word.append((char) i);
-        }
-        Automaton nfa = NFA.buildNFA(RegexParser.parse(word.toString()));
+    void handlesTheWholeByteAlphabetWithOneWildcard() throws Exception {
+        Automaton nfa = NFA.buildNFA(RegexParser.parse("a.b"));
         Automaton dfa = DFA.convert(nfa);
-        assertEquals(word.length(), dfa.getTransitions().size());
         Automaton searchable = DFA.forSearch(nfa);
-        // Au plus : première lettre, prochaine lettre, tous les autres.
-        assertTrue(searchable.getTransitions().size() <= 3 * word.length());
+
+        // Le point reste une transition symbolique : l'automate ne duplique pas 256 arcs.
+        assertEquals(3, dfa.getTransitions().size());
+        assertEquals(10, searchable.getTransitions().size());
+
         NativeSearch.Prepared prepared = NativeSearch.fromSearchDfa(searchable);
-        assertTrue(prepared.search("\0\uffff" + word + "suffixe"));
-        assertFalse(prepared.search(word.substring(0, word.length() - 1)));
+        for (int symbol = 0; symbol < 256; symbol++) {
+            byte[] word = {(byte) 'a', (byte) symbol, (byte) 'b'};
+            assertTrue(prepared.search(word), "Le point doit accepter l'octet " + symbol);
+        }
+        assertFalse(prepared.search(new byte[] {'a', 'b'}));
     }
 
     @Test

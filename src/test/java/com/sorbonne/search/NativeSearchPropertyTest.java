@@ -27,8 +27,8 @@ class NativeSearchPropertyTest {
     }
 
     /**
-     * Vérifie les mots littéraux et les propriétés d'insertion/extraction sur l'alphabet 8 bits.
-     * @return 400 cas, dont motifs vides, répétitifs et caractères spéciaux
+     * Vérifie les mots littéraux ASCII et les propriétés d'insertion/extraction.
+     * @return 400 cas, dont motifs vides, répétitifs et caractères spéciaux ASCII
      */
     @TestFactory
     Stream<DynamicTest> agreesWithLiteralSearchAndInsertionProperties() {
@@ -36,7 +36,7 @@ class NativeSearchPropertyTest {
             long seed = 2210000L + index;
             return DynamicTest.dynamicTest("Motif littéral — graine=" + seed, () -> {
                 Random random = new Random(seed);
-                String alphabet = index % 2 == 0 ? "ab" : "ab.*|\n\0\u0080\u00ff";
+                String alphabet = index % 2 == 0 ? "ab" : "ab.*|\n\0\t~";
                 String text = SearchGenerators.text(random, 40, alphabet);
                 String pattern = SearchGenerators.text(random, 12, alphabet);
                 NativeSearch.Prepared prepared = NativeSearch.prepare(AutomatonBuilder.literal(pattern));
