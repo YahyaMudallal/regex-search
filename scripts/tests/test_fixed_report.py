@@ -39,7 +39,7 @@ def fixture(directory, profile=None):
                         matching_lines=0, total_lines=10, parsing_ns=n, nfa_ns=n, dfa_ns=n, minimization_ns=0,
                         search_preparation_ns=n, preparation_ns=4*n, scan_ns=6*n, total_ns=10*n))
     automata = [dict(case_id=c['id'], regex_length=len(c['regex']), nfa_states=10+i, nfa_transitions=20+i,
-                     search_dfa_states=30+i, search_dfa_transitions=40+i)
+                     search_dfa_states=30+i, search_dfa_transitions=40+i, dfam_states=20+i, dfam_transitions=25+i)
                 for i, c in enumerate(profile['experiments'])]
     a, b = report.summaries(profile, cli, jvm)
     for name, rows in [('automata.csv', automata), ('cli.csv',cli), ('jvm.csv',jvm), ('cli-summary.csv',a), ('jvm-summary.csv',b)]:
@@ -50,7 +50,7 @@ def fixture(directory, profile=None):
         integrity=report.tree_hashes(directory), source_sha256={}, started_utc='2000-01-01T00:00:00+00:00',
         finished_utc='2000-01-01T00:00:00+00:00', java_version='fixture', grep_version='fixture', locale='fixture',
         os='fixture', cpu='fixture', python='fixture', logical_cpu_count=1, cli_scope='fixture', jvm_scope='fixture',
-        git_head='fixture', git_dirty=False, minimization_implemented=False,
+        git_head='fixture', git_dirty=False, minimization_implemented=True,
         validation={c['id']: {'matching_lines':0} for c in profile['experiments']},
         automata={row['case_id']: row for row in automata},
         corpora={c['corpus']: {'lines':10, 'bytes':1000} for c in profile['experiments']})
@@ -66,12 +66,27 @@ class FixedReportTest(unittest.TestCase):
         self.profile = report.load_profile()
 
     def test_fixed_profile_and_branch_growth_expansion(self):
-        self.assertEqual(14, len(self.profile['experiments']))
-        self.assertEqual(13, sum(c.get('cli', True) for c in self.profile['experiments']))
+        self.assertEqual(32, len(self.profile['experiments']))
+        self.assertEqual(30, sum(c.get('cli', True) for c in self.profile['experiments']))
         for case in self.profile['experiments']:
             if 'branch_depth' in case:
                 self.assertEqual('(a|b)*a' + '(a|b)'*case['branch_depth'] + 'b', case['regex'])
         self.assertEqual(30, self.profile['cli']['blocks']*self.profile['cli']['pairs_per_block'])
+
+    def test_comparison_rejects_different_inputs(self):
+        profile = copy.deepcopy(self.profile)
+        profile['experiments'][0]['regex'] = 'different'
+        report.write_json(self.root/'profile.json', profile)
+        with self.assertRaisesRegex(ValueError, 'partager regex'):
+            report.load_profile(self.root/'profile.json')
+
+    def test_report_compares_four_engines_and_marks_kmp_not_applicable(self):
+        manifest, cli, jvm = fixture(self.root)
+        a, b = report.summaries(manifest['profile'], cli, jvm)
+        text = report.report_markdown(manifest, a, b)
+        self.assertIn('| KMP ms | DFA ms | DFAM ms | GNU grep -E ms |', text)
+        self.assertIn('| N/A |', text)
+        self.assertIn('Hopcroft ms', text)
 
     def test_balancing_is_exact_and_reproducible(self):
         first = report.balanced_orders(6, random.Random(123))

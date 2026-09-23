@@ -69,6 +69,20 @@ def load_profile(path=PROFILE):
                 raise ValueError("branch_depth doit être un entier entre 1 et 12")
             case["regex"] = "(a|b)*a" + "(a|b)" * depth + "b"
         validate_expression(case["regex"])
+    comparisons = {}
+    engines = {}
+    for case in profile["experiments"]:
+        if case["strategy"] not in {"KMP", "DFA", "DFAM"}:
+            raise ValueError("La comparaison exige des stratégies explicites KMP, DFA ou DFAM")
+        signature = (case["regex"], case["corpus"], case.get("cli", True))
+        if comparisons.setdefault(case["comparison"], signature) != signature:
+            raise ValueError("Les moteurs d'une comparaison doivent partager regex, corpus et périmètre")
+        seen = engines.setdefault(case["comparison"], set())
+        if case["strategy"] in seen:
+            raise ValueError("Stratégie dupliquée dans une comparaison")
+        seen.add(case["strategy"])
+    if any(not {"DFA", "DFAM"}.issubset(seen) for seen in engines.values()):
+        raise ValueError("Chaque comparaison exige un témoin DFA et un chemin DFAM")
     return profile
 
 
@@ -185,9 +199,14 @@ def validate_case(work, case, commands, environment, timeout):
 def collect_automata(profile, java_prefix, environment, destination):
     """Mesure la taille des graphes hors chronométrage, une seule fois par regex."""
     rows = []
+    cache = {}
     for case in profile["experiments"]:
+        if case["regex"] in cache:
+            rows.append({"case_id": case["id"], **cache[case["regex"]]})
+            continue
         command = java_prefix + ["com.sorbonne.benchmark.AutomatonProfile", case["regex"]]
-        result = subprocess.run(command, capture_output=True, text=True, env=environment, check=True)
+        result = subprocess.run(command, capture_output=True, text=True, env=environment, check=True,
+                                timeout=profile["jvm"]["timeout_seconds"])
         records = list(csv.DictReader(io.StringIO(result.stdout)))
         if len(records) != 1:
             raise ValueError(f"Profil structurel invalide : {case['id']}")
@@ -195,6 +214,7 @@ def collect_automata(profile, java_prefix, environment, destination):
         row = {"case_id": case["id"], **{key: int(value) for key, value in raw.items()}}
         if row["nfa_states"] < 1 or row["search_dfa_states"] < 1:
             raise ValueError(f"Automate vide inattendu : {case['id']}")
+        cache[case["regex"]] = {key: value for key, value in row.items() if key != "case_id"}
         rows.append(row)
     write_csv(destination / "automata.csv", rows)
     return rows
@@ -270,7 +290,7 @@ def summaries(profile, cli_rows, jvm_rows):
                     raise ValueError("Échantillon CLI incomplet")
                 cli_summary.append({"case_id": identifier, "engine": engine, "unit": "process",
                                     **summarize(values, profile["noise_iqr_ratio"])})
-        for metric in ("parsing_ns", "nfa_ns", "dfa_ns", "search_preparation_ns", "preparation_ns", "scan_ns", "total_ns"):
+        for metric in ("parsing_ns", "nfa_ns", "dfa_ns", "minimization_ns", "search_preparation_ns", "preparation_ns", "scan_ns", "total_ns"):
             means = []
             for fork in range(1, profile["jvm"]["forks"] + 1):
                 values = [row[metric] / 1e6 for row in jvm_rows if row["case_id"] == identifier
@@ -319,7 +339,10 @@ def report_markdown(manifest, cli_summary, jvm_summary):
     lines = ["# Campagne fixe du README", "", f"Exécution UTC : {manifest['finished_utc']}", "",
              f"Protocole : `{profile['protocol']}` ; empreinte `{manifest['profile_sha256']}`.", "",
              "Les données concernent les sources optimisées identifiées dans [campaign.json](campaign.json).",
-             "DFAM reste inchangé et ne minimise pas les automates.", "",
+             "DFAM applique la minimisation de Hopcroft au DFA de recherche avant indexation.", "",
+             "KMP est comparé uniquement sur les littéraux. DFA et DFAM partagent le même DFA de recherche initial et la même indexation ; seule la minimisation change.",
+             "Les motifs acceptant le mot vide utilisent le raccourci commun sans construire d'automate, même en DFA/DFAM.",
+             "Le profil structurel construit les graphes à titre diagnostique, même pour KMP ou un motif nullable ; ce n'est pas le travail effectué par ces chemins chronométrés.", "",
              "## Commandes complètes", "",
              "Médiane et intervalle interquartile de 30 processus par moteur. Démarrage JVM inclus ; aucun point retiré.", "",
              "| Cas et regex exécutée | Corpus | Lignes | Java, médiane [Q1 ; Q3] ms | GNU grep, médiane [Q1 ; Q3] ms |",
@@ -333,13 +356,14 @@ def report_markdown(manifest, cli_summary, jvm_summary):
             row = lookup[case["id"], engine]
             cells.append(f"{row['median_ms']:.2f} [{row['q25_ms']:.2f} ; {row['q75_ms']:.2f}]")
         lines.append(f"| {case['label']}<br>`{case['regex'].replace(chr(124), chr(92)+chr(124))}` | {case['corpus']} | {manifest['validation'][case['id']]['matching_lines']} | {' | '.join(cells)} |")
+    lines += comparison_markdown(profile, cli_summary, jvm_summary)
     lines += ["", "## Taille structurelle des automates", "",
               "Ces comptes sont collectés une seule fois hors chronométrage. Ils permettent de relier le coût de préparation à la taille réellement construite.", "",
-              "| Cas | Longueur regex | États NFA | Transitions NFA | États DFA recherche | Transitions DFA recherche |",
-              "| :--- | ---: | ---: | ---: | ---: | ---: |"]
+              "| Cas | Longueur regex | États NFA | Transitions NFA | États DFA recherche | Transitions DFA recherche | États DFAM | Transitions DFAM |",
+              "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
     for case in profile["experiments"]:
         shape = manifest["automata"][case["id"]]
-        lines.append(f"| {case['label']} | {shape['regex_length']} | {shape['nfa_states']} | {shape['nfa_transitions']} | {shape['search_dfa_states']} | {shape['search_dfa_transitions']} |")
+        lines.append(f"| {case['label']} | {shape['regex_length']} | {shape['nfa_states']} | {shape['nfa_transitions']} | {shape['search_dfa_states']} | {shape['search_dfa_transitions']} | {shape['dfam_states']} | {shape['dfam_transitions']} |")
     lines += ["", "## JVM échauffées", "",
               "5 JVM distinctes par cas ; 10 prépassages puis 10 mesures par JVM. Chaque mesure reconstruit le motif et lit le fichier.",
               "Les statistiques sont calculées sur les **5 moyennes de forks**, pas sur 50 répétitions prétendument indépendantes.",
@@ -366,6 +390,40 @@ def report_markdown(manifest, cli_summary, jvm_summary):
                   "", "```text", case["regex"], "```", "", "</details>", ""]
     return "\n".join(lines)
 
+
+
+def comparison_markdown(profile, cli_summary, jvm_summary):
+    groups = {}
+    for case in profile["experiments"]:
+        groups.setdefault(case["comparison"], {})[case["strategy"]] = case
+    cli = {(row["case_id"], row["engine"]): row for row in cli_summary}
+    jvm = {(row["case_id"], row["metric"]): row for row in jvm_summary}
+    lines = ["", "## Comparaison directe des moteurs", "",
+             "Même regex et même corpus sur chaque ligne. N/A : KMP ne traite pas les opérateurs regex.",
+             "GNU grep -E est l'équivalent d'egrep ; sa colonne utilise les 30 mesures du cas DFA associé, sans mélanger les séries.", "",
+             "| Regex / corpus | KMP ms | DFA ms | DFAM ms | GNU grep -E ms |",
+             "| :--- | ---: | ---: | ---: | ---: |"]
+    for strategies in groups.values():
+        case = strategies["DFA"]
+        if not case.get("cli", True):
+            continue
+        values = [f"{cli[strategies[key]['id'], 'java']['median_ms']:.3f}" if key in strategies else "N/A"
+                  for key in ("KMP", "DFA", "DFAM")]
+        values.append(f"{cli[case['id'], 'grep']['median_ms']:.3f}")
+        regex = case["regex"].replace("|", "\\|")
+        lines.append(f"| `{regex}` / {case['corpus']} | " + " | ".join(values) + " |")
+    lines += ["", "### Effet propre de la minimisation dans les JVM", "",
+              "Chaque valeur est la médiane des cinq moyennes de forks. Les médianes de phases ne sont pas additives.", "",
+              "| Regex / corpus | Hopcroft ms | Préparation DFA / DFAM ms | Parcours DFA / DFAM ms | Total DFA / DFAM ms |",
+              "| :--- | ---: | ---: | ---: | ---: |"]
+    for strategies in groups.values():
+        dfa, dfam = strategies["DFA"], strategies["DFAM"]
+        values = [f"{jvm[dfam['id'], 'minimization_ns']['median_ms']:.3f}"]
+        for metric in ("preparation_ns", "scan_ns", "total_ns"):
+            values.append(" / ".join(f"{jvm[c['id'], metric]['median_ms']:.3f}" for c in (dfa, dfam)))
+        regex = dfa["regex"].replace("|", "\\|")
+        lines.append(f"| `{regex}` / {dfa['corpus']} | " + " | ".join(values) + " |")
+    return lines
 
 def publish_assets(report_directory):
     """Publie atomiquement les assets référencés par README/docs après validation complète."""
@@ -553,6 +611,8 @@ def validate_observations(manifest, cli, jvm):
         if any(value < 0 for key, value in row.items() if key.endswith("_ns")):
             raise ValueError("Durée négative")
     for row in jvm:
+        if cases[row["case_id"]]["strategy"] in {"DFA", "KMP"} and row["minimization_ns"] != 0:
+            raise ValueError("La minimisation doit être absente du témoin DFA/KMP")
         group = (row["case_id"], row["fork"])
         if groups.setdefault(group, row["sequence"]) != row["sequence"]:
             raise ValueError("Fork réparti sur plusieurs processus")
@@ -625,7 +685,7 @@ def execute(cache, purge=False, allow_dirty=False):
         commands[case["id"]] = {"java": java_prefix + ["com.sorbonne.Main", "--count", *common],
                                  "grep": [grep, "-E", "-c", "--", case["regex"], common[0]]}
     expected = {key: value["matching_lines"] for key, value in validation.items()}
-    print("3/7 Profil structurel NFA/DFA hors chronométrage", flush=True)
+    print("3/7 Profil structurel NFA/DFA/DFAM hors chronométrage", flush=True)
     automata_rows = collect_automata(profile, java_prefix, environment, destination)
     print("4/7 Commandes complètes : blocs équilibrés, processus indépendants", flush=True)
     cli_rows = collect_cli(profile, [case for case in profile["experiments"] if case.get("cli", True)],
@@ -646,7 +706,7 @@ def execute(cache, purge=False, allow_dirty=False):
                 "logical_cpu_count": os.cpu_count(), "load_average_at_end": os.getloadavg(),
                 "class_sha256": class_hashes, "corpora": corpus_metadata, "validation": validation,
                 "automata": {row["case_id"]: row for row in automata_rows},
-                "commands": commands, "outlier_filter": None, "minimization_implemented": False,
+                "commands": commands, "outlier_filter": None, "minimization_implemented": True,
                 "cli_scope": "new process, JVM startup + preparation + IO + count",
                 "jvm_scope": "fresh preparation + IO per invocation, warmed process, summarized by fork",
                 "integrity": tree_hashes(destination)}
