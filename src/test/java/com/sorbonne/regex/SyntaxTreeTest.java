@@ -131,4 +131,18 @@ class SyntaxTreeTest {
 		assertTrue(new SyntaxTree(null, null, NodeType.CLOSE_PARENTHESE).toString().contains("└── )\n"));
 	}
 
+    @Test
+    void preservesIndentationAcrossNestedSiblingBranches() throws Exception {
+        assertEquals("""
+                └── .
+                    ├── *
+                    │   └── |
+                    │       ├── a
+                    │       └── .
+                    │           ├── b
+                    │           └── c
+                    └── d
+                """, RegexParser.parse("(a|bc)*d").toString());
+    }
+
 }
