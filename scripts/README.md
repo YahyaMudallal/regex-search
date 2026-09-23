@@ -84,8 +84,7 @@ cache de fichiers du système ; ils ne constituent pas un échauffement du JIT c
 entre mesures. Le protocole compare donc les usages en ligne de commande. La campagne fixe ci-dessous complète cette mesure avec plusieurs JVM persistantes, tout en incluant les IO du fichier. L'ordre aléatoire atténue un biais d'ordre, sans supprimer le bruit
 lié au système. Éviter les autres charges lourdes pendant une expérience.
 
-La phase `DFAM` est encore un placeholder : les résultats ne représentent pas
-les performances d'une minimisation effective.
+La phase `DFAM` applique Hopcroft. Les mesures JVM distinguent son coût de la déterminisation et le profil structurel publie les tailles du DFA avant/après minimisation.
 
 ## Options et résultats
 
@@ -96,7 +95,7 @@ les performances d'une minimisation effective.
   --output-dir target/benchmarks/experience-01
 ```
 
-`--strategy` accepte `AUTO`, `KMP` ou `AUTOMATON`. KMP forcé refuse une regex non
+`--strategy` accepte `AUTO`, `KMP`, `DFA`, `DFAM` ou `AUTOMATON`. KMP forcé refuse une regex non
 littérale. Le délai est en secondes **par processus**, pas pour l'expérience entière.
 Une seule répétition est autorisée pour vérifier le fonctionnement, mais son écart
 type est indiqué comme indisponible ; utiliser plusieurs répétitions pour analyser
@@ -130,12 +129,14 @@ et les durées.
 ./scripts/package.sh                     # tests + JAR + ZIP de rendu < 10 Mio
 ```
 
-Le profil [`report-profile.json`](report-profile.json) est versionné et fixe la campagne. Les mots littéraux sont des témoins KMP ; les cas automate emploient des alternatives, wildcards et une famille de croissance `(a|b)*a(a|b)…(a|b)b` aux profondeurs 5, 7 et 9. Un helper Java compte les états/transitions NFA et DFA **hors chronométrage**, afin de relier les temps à la structure réellement construite.
+Le profil [`report-profile.json`](report-profile.json) est versionné et fixe la campagne. Les mots littéraux sont des témoins KMP ; les cas automate emploient des alternatives, wildcards et une famille de croissance `(a|b)*a(a|b)…(a|b)b` aux profondeurs 5, 7 et 9. Un helper Java compte les états/transitions NFA, DFA et DFAM **hors chronométrage**, afin de relier les temps à la structure réellement construite.
 
-La campagne de référence nécessite **Java 21**, Python ≥ 3.12, GNU grep et une locale UTF-8. L'environnement Matplotlib est mis en cache dans `.cache/report-venv/`. Une campagne normale refuse un arbre Git sale ; `--allow-dirty` existe seulement pour explorer localement et bloque la publication.
+La campagne de référence nécessite **Java 21**, Python ≥ 3.12, GNU grep et une locale UTF-8. L'environnement Matplotlib est mis en cache dans `.cache/report-venv/`. Une campagne normale refuse un arbre Git sale ; `--allow-dirty` garde les résultats locaux sans publication automatique ; `freeze-report.sh` permet ensuite une publication explicite avec empreintes des sources.
 
 Après validation des sorties numérotées contre GNU grep, le système recueille les observations CLI et JVM, recalcule les résumés, génère les six figures dans un dossier temporaire puis remplace `docs/assets/` avec restauration automatique en cas d'échec. Les corpus dérivés et doubles PNG sont ensuite supprimés. Sans `--purge`, les CSV/TXT restent sous `target/report/results/` ; avec `--purge`, ils sont supprimés uniquement après la publication.
 
 `package.sh` refuse lui aussi un arbre Git sale. Il archive uniquement `git ls-files` et le JAR final, ce qui exclut mécaniquement `.git`, `target`, `.cache`, environnements virtuels et fichiers IDE. L'archive est déterministe et le script échoue si elle dépasse 10 Mio.
 
 `compare-egrep.sh` reste disponible pour les essais libres avec paramètres ; ces essais ne produisent pas la référence du README. Voir le [protocole](../docs/05-experiences.md) et les [commandes détaillées](../docs/01-utilisation.md#5-reproduire-toute-la-campagne-du-rapport).
+
+Le profil `report-v4-dfa-dfam-kmp-grep` compare DFA et DFAM sur chaque regex et ajoute KMP pour `Elizabeth` et `ababababac`. Les graphiques utilisent les mêmes entrées par groupe et marquent KMP non applicable aux regex avec opérateurs. Il comprend 32 cas Java, dont 30 cas CLI à 30 processus par moteur, et 5 JVM par cas avec 10 prépassages puis 10 mesures. GNU grep -E joue le rôle d’egrep ; sa série affichée est celle associée au témoin DFA.

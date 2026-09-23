@@ -56,7 +56,7 @@ Les [générateurs communs](../src/test/java/com/sorbonne/support/SearchGenerato
 | NativeSearch, littéraux | 400 | Recherche, insertion, extraction et absence garantie |
 | NativeSearch, expressions | 300 | 16 textes par préparation |
 | NativeSearch, graphes arbitraires | 150 | 12 textes par graphe avec oracle exhaustif de sous-chaînes |
-| Benchmark sur fichiers | 120 | Un fichier généré, comparaison de `AUTO` et `AUTOMATON` à l’oracle |
+| Benchmark sur fichiers | 120 | Un fichier généré, comparaison de `AUTO`, `DFA`, `DFAM` et `AUTOMATON` à l’oracle |
 
 KMP possède également un test exhaustif sur **945 couples** de petits mots binaires : les textes de longueur 0 à 5 sont croisés avec les motifs de longueur 0 à 3. Ce test vaut une seule entrée dans le compteur JUnit, même s’il contient de nombreuses assertions.
 
@@ -92,7 +92,9 @@ Trois tests Java de `Main` protègent le mode `--count` : sortie numérique seul
 
 ## 6. État vérifié du code optimisé
 
-La campagne fixe exécute les tests avant toute mesure : **3 673 tests Java et 21 tests Python**. Le journal est conservé localement dans `target/report/results/validation.txt`. Les tests Python supplémentaires protègent l'équilibrage des moteurs, le calcul par fork, les contrôles d'intégrité, le refus des observations dupliquées, la restauration après une publication interrompue et la conservation des assets lors du nettoyage.
+Les 458 tests de `DFAMHopcroftTest` vérifient les exemples et propriétés de minimisation, dont la conservation du langage et du comportement de recherche. Les tests du benchmark couvrent les chemins DFA sans minimisation, DFAM et le raccourci nullable. Les tests Python refusent aussi de comparer des moteurs sur des entrées différentes.
+
+La campagne fixe exécute les tests avant toute mesure : **4 140 tests Java et 24 tests Python**. Le journal est conservé localement dans `target/report/results/validation.txt`. Les tests Python supplémentaires protègent l'équilibrage des moteurs, le calcul par fork, les contrôles d'intégrité, le refus des observations dupliquées, la restauration après une publication interrompue et la conservation des assets lors du nettoyage.
 
 La version optimisée ajoute les longues expressions sans récursion, la comparaison du chemin NFA direct, les curseurs entre blocs, les numéros et contenus exacts des lignes et les corpus normalisés par blocs. Voir le [relevé des optimisations](07-optimisations.md).
 
@@ -106,6 +108,6 @@ Les oracles ne sont pas tous entièrement indépendants : le simulateur NFA part
 
 L’égalité des comptes avec grep ne garantit pas, à elle seule, que les mêmes lignes ont été sélectionnées : deux ensembles différents peuvent avoir le même cardinal. Le mode retournant les numéros et contenus des lignes est maintenant comparé à un oracle sur les fichiers générés, hors chronométrage.
 
-Enfin, les tests actuels de DFAM vérifient une identité provisoire. Ils devront être remplacés ou complétés lors de la minimisation : conservation du langage, états indiscernables fusionnés, idempotence et traitement cohérent de l’état puits sont encore à vérifier.
+Les tests de `DFAM` couvrent maintenant la conservation du langage avant/après minimisation, la fusion d'états indiscernables, la suppression des états inaccessibles, les transitions partielles via un puits implicite, les classes `ANY`, l'idempotence du nombre d'états et le comportement du DFA spécialisé de recherche. Deux property tests génèrent des centaines de regex et des milliers de mots/textes reproductibles.
 
 [← Algorithmes](03-algorithmes.md) · [Accueil](../README.md) · [Expériences →](05-experiences.md)

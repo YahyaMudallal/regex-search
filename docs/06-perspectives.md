@@ -13,30 +13,21 @@ La suite du travail doit maintenant fermer les écarts avec le sujet et approfon
 | Sous-ensemble regex demandé               | Implémenté pour les opérateurs retenus | Parseur, tests de priorité et d’échappement          |
 | Arbre → NFA avec ε                        | Implémenté                             | Construction structurelle et tests                   |
 | NFA → DFA par sous-ensembles              | Implémenté                             | Tests de langage et de déterminisme                  |
-| DFA équivalent minimal                    | **À implémenter**                      | `DFAM.minimize` est une identité                     |
+| DFA équivalent minimal                    | **Implémenté**                          | Hopcroft, puits implicite et alphabet symbolique      |
 | Recherche dans les lignes d’un fichier    | Implémentée sous forme de comptage     | Lecture bufferisée et tests sur fichiers             |
 | Affichage des lignes comme egrep          | Implémenté                             | `search.sh`, lignes numérotées et validation exacte         |
 | KMP expliqué et confronté aux automates   | Présent                                | Chapitres 3 et 5, même mot et même corpus            |
 | Comparaison des performances à egrep      | Campagne reproductible avec assets publiés           | GNU grep sur macOS ; protocole de processus complets |
 | Tests et rapport argumenté                | Présents, à maintenir                  | Exemples, génération, données brutes et figures      |
-| Rapport final de 5 à 10 pages, 12 maximum | À composer pour le rendu               | Cette documentation constitue la matière détaillée   |
+| Rapport final LaTeX synthétique | En cours de composition | 12 pages de contenu prévues ; couverture, sommaire et bibliographie séparés |
 
 Le sujet illustre une commande contenant `+`, mais son périmètre obligatoire énumère un sous-ensemble plus restreint. Le rapport et les exemples du projet s’en tiennent aux opérateurs réellement implémentés ; il ne faut pas présenter l’exemple illustratif du sujet comme une expression déjà supportée telle quelle.
 
-## 2. Implémenter la minimisation avec un contrat testable
+## 2. Minimisation implémentée ; limites restantes
 
-Deux états sont équivalents si aucune continuation ne permet de les distinguer : depuis chacun, les mêmes suffixes conduisent à une acceptation. La future implémentation devra identifier ces classes d’équivalence et construire leur graphe quotient.
+La minimisation n'est plus une perspective : `DFAM` applique Hopcroft avec alphabet symbolique et état puits implicite. Elle produit un nouveau graphe, élimine les états inaccessibles et conserve le langage des DFA classiques comme le comportement d'arrêt précoce des DFA de recherche.
 
-Avant de choisir les structures, plusieurs points doivent être fixés :
-
-1. **DFA partiel.** Une transition manquante représente le rejet. Le traitement devra être équivalent à une complétion par un état puits, même si le résultat final reste partiel.
-2. **Classes de caractères.** Les arcs littéraux et complémentaires doivent être traités comme une partition cohérente de l’alphabet. Deux états ne peuvent pas être déclarés équivalents en ignorant leurs exclusions.
-3. **Mutabilité.** Il faut documenter si le résultat est un nouveau graphe ou si l’entrée est modifiée. Une nouvelle construction faciliterait les tests avant/après et éviterait des effets sur les états partagés.
-4. **Position dans la chaîne.** Minimiser le DFA du motif ne garantit pas que l’automate obtenu après la préparation de `NativeSearch` sera lui aussi minimal.
-
-La validation devra comparer les langages avant et après, vérifier le déterminisme, examiner des automates avec états inaccessibles et vérifier l’idempotence en nombre d’états et en langage. Le test actuel `assertSame` de DFAM décrit seulement le placeholder : il devra évoluer lors de cette implémentation.
-
-La campagne pourra alors publier le nombre d’états et d’arcs avant/après, le coût de minimisation et l’effet sur la recherche. Une réduction de taille ne sera pas automatiquement un gain de temps sur de petits fichiers : il faudra amortir son coût de préparation.
+La limite principale se situe **avant** cette étape. La construction par sous-ensembles peut créer exponentiellement beaucoup d'états ; minimiser ensuite ne rembourse ni le temps ni la mémoire déjà dépensés pour les générer. Une perspective pertinente serait donc une déterminisation à la demande ou une simulation NFA lorsqu'un budget d'états est dépassé. Une autre piste serait de mesurer sur des familles spécialement construites pour produire beaucoup d'états équivalents, afin d'étudier quand le coût `O(k n log n)` de Hopcroft est amorti par la réduction du moteur indexé.
 
 ## 3. Maintenir le contrat de sortie de recherche
 
@@ -67,7 +58,7 @@ Les optimisations envisageables doivent être reliées à un coût identifié. L
 
 ## 5. Passer de cette documentation au rapport de rendu
 
-Le [sujet fourni](../src/main/java/com/sorbonne/specifications/daar_projet1.pdf) recommande 5 à 10 pages et fixe une limite formelle de 12 pages. Les chapitres Markdown sont conçus comme une documentation consultable et détaillée ; les concaténer tels quels ne respecte pas nécessairement cette contrainte.
+Le [sujet fourni](../src/main/java/com/sorbonne/specifications/daar_projet1.pdf) recommande 5 à 10 pages et fixe une limite formelle de 12 pages. Le rendu LaTeX est donc conçu comme une synthèse autonome, tandis que les chapitres Markdown restent la documentation technique détaillée. Pour la version demandée par le binôme, les 12 pages de contenu sont composées séparément de la page de garde, du sommaire et de la bibliographie.
 
 Un plan de synthèse de dix pages peut reprendre :
 

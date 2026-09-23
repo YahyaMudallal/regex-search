@@ -130,17 +130,30 @@ $$
 
 Elle comprend les index, les bitsets mémorisés en mots de 64 bits, le graphe produit et ses exclusions locales. $K$ majore le nombre de classes locales. Aucune table de toutes les fermetures ε, potentiellement quadratique, n’est pré-calculée. L’alphabet `char` est borné ; la recherche d’un représentant de la classe complémentaire est donc elle aussi bornée par sa taille. L’explosion du nombre de sous-ensembles reste la difficulté principale : indexer les arcs évite des parcours inutiles, mais ne supprime pas cette croissance possible.
 
-## 5. La minimisation : une étape prévue, pas un résultat acquis
+## 5. Minimisation de Hopcroft sur DFA partiel et alphabet symbolique
 
-[DFAM](../src/main/java/com/sorbonne/regex/DFAM.java) expose pour l’instant :
+[`DFAMHopcroft.minimize`](../src/main/java/com/sorbonne/regex/DFAMHopcroft.java) construit un **nouvel automate minimal** et ne modifie jamais le DFA fourni. La définition suivie est celle du chapitre 10 du cours (§10.4, « Minimization of Automata ») : final/non-final forme la séparation de base, puis deux états sont distingués dès qu'un symbole mène vers deux classes déjà distinguées. Hopcroft calcule le point fixe de ce même critère par raffinement de partitions, en évitant le coût d'un examen naïf de toutes les paires. Les états inaccessibles sont retirés avant ce raffinement.
 
-```java
-public static Automaton minimize(Automaton dfa)
-```
+Le cours précise aussi qu'un automate déterministe partiel doit être complété par un **dead state** non final bouclant sur tous les symboles. Dans le projet, une transition absente signifie rejet ; l'index interne ajoute donc exactement cet **état puits implicite**. Ce puits participe aux classes d'équivalence mais n'est pas matérialisé dans le résultat lorsqu'il ne correspond à aucun état réel accessible. Cette technique conserve le langage tout en gardant un graphe final partiel.
 
-La méthode contrôle seulement la non-nullité et retourne le même objet. Son coût actuel est $O(1)$ en temps et en mémoire supplémentaire. Il serait trompeur d’attribuer ce coût à une véritable minimisation.
+L'alphabet n'est pas développé naïvement sur 65 536 valeurs `char`. On collecte globalement les caractères apparaissant comme arcs littéraux ou comme exclusions d'un arc `ANY`. Chacun forme une classe singleton ; toutes les autres valeurs partagent au plus une classe « autre ». Si `k` est le nombre de classes obtenues, l’index dense est construit pour tous les états fournis, plus le puits, avant de calculer l’accessibilité. En notant `N` ce total et `n` le nombre d’états accessibles, la mémoire de l’index est O(kN) ; le raffinement agit sur les `n` états accessibles. L’alphabet n’est pas nécessairement tout BMP.
 
-Le contrat de la future version devra préserver le langage, traiter correctement les transitions absentes et respecter les classes de caractères. Un DFA partiel demande notamment de décider comment représenter le rejet lors du raffinement des classes d’états. Le chapitre des [perspectives](06-perspectives.md) décrit les validations attendues.
+Pour éviter qu'une scission reparcoure un bloc entier, l'implémentation utilise :
+
+- des prédécesseurs en tableaux **CSR** pour chaque classe de caractères ;
+- un tableau `blockOf` donnant en O(1) la classe d'un état ;
+- des listes doublement chaînées indexées par entiers pour déplacer un état entre deux blocs en O(1) ;
+- une worklist qui, lorsqu'un bloc non planifié est scindé, ne planifie que la plus petite moitié.
+
+C'est la règle qui donne à Hopcroft sa borne classique :
+
+\[
+T_{Hopcroft}=O(k\,n\log n),\qquad M_{Hopcroft}=O(k\,n).
+\]
+
+L'indexation des arcs `ANY` ajoute un coût `O(Ak)` pour `A` arcs universels et la collecte des exclusions `O(X)`. Le résultat est reconstruit avec un arc `ANY` vers la destination de base et seulement les exceptions littérales nécessaires ; le nombre de transitions n'est donc pas artificiellement multiplié par les classes symboliques.
+
+Les tests vérifient la conservation du langage sur des regex générées, le comportement du DFA spécialisé de recherche, la fusion d'états équivalents, la suppression des états inaccessibles, les arcs `ANY`, les DFA partiels et l'idempotence du nombre d'états.
 
 ## 6. Trouver une occurrence avec NativeSearch
 
@@ -158,9 +171,9 @@ Tous les sous-ensembles acceptants partagent un état terminal sans transitions.
 
 ### Une seule déterminisation dans le pipeline
 
-`Benchmark` construit le NFA, appelle `DFA.forSearch`, transmet le résultat à l’étape DFAM inchangée puis l’indexe avec `NativeSearch.fromSearchDfa`. Il n’y a plus de deuxième déterminisation. `NativeSearch.prepareNfa` fournit également cette préparation directe ; l’ancienne méthode `prepare` conserve son contrat de validation d’un DFA de mots entiers.
+`Benchmark` construit le NFA, appelle `DFA.forSearch`, minimise le résultat avec DFAM puis l’indexe avec `NativeSearch.fromSearchDfa`. Il n’y a plus de deuxième déterminisation. `NativeSearch.prepareNfa` fournit également cette préparation directe ; l’ancienne méthode `prepare` conserve son contrat de validation d’un DFA de mots entiers.
 
-Si l’arbre accepte ε, `Benchmark` utilise directement un moteur toujours vrai. Il parcourt encore le fichier pour compter ou restituer les lignes et détecter les erreurs de décodage. La stratégie annoncée reste AUTOMATON pour un motif non littéral, mais les phases NFA/DFA/DFAM non exécutées valent zéro.
+Si l’arbre accepte ε, `Benchmark` utilise directement un moteur toujours vrai. Il parcourt encore le fichier pour compter ou restituer les lignes et détecter les erreurs de décodage. La stratégie annoncée conserve DFA/DFAM si elle est imposée, ou AUTOMATON en sélection automatique pour un motif non littéral ; les phases NFA/DFA/DFAM non exécutées valent zéro.
 
 L’index contient des identifiants entiers, une classification globale des caractères et des pages de transitions avec destination par défaut. Seules les pages contenant des exceptions sont allouées. L’indexation reste bornée par $O(RK+T+X)$ au pire, mais n’alloue pas systématiquement une table dense $RK$. Le parcours fait des accès directs : $O(n)$ temps au pire et $O(1)$ mémoire supplémentaire hors index.
 
@@ -198,13 +211,13 @@ Le parseur et l’extraction du littéral sont eux aussi linéaires : la borne t
 | Analyse syntaxique | $O(m)$ | Piles explicites, arbre de taille $O(m)$ |
 | NFA | $O(m)$ temps moyen et mémoire | Graphe commun, aucune copie de fragment |
 | DFA | $O(N+E+X+RK(N+E))$ en moyenne | $R$ peut atteindre $2^N$ |
-| DFAM | $O(1)$ actuellement | Identité provisoire, aucune minimisation |
+| DFAM | $O(k n \log n)$ après indexation | Hopcroft ; DFA partiel complété par un puits implicite |
 | Préparation NativeSearch | Une déterminisation directe, puis indexation par pages | Explosion possible pendant la préparation |
 | Recherche NativeSearch préparée | $O(n)$ au pire | Coût et taille de l’index exclus de ce parcours |
 | Préparation KMP | $O(m)$ | Motif littéral uniquement |
 | Recherche KMP préparée | $O(n)$ | Préparation et parseur à ajouter au temps complet |
 | Comptage par blocs | $O(C+L)$ temps, $O(B)$ mémoire hors moteur | Affichage : une ligne entière reste allouée |
 
-Le rendu d’`Automaton` utilise aussi un index des arcs sortants : $O(N+E+Z)$ pour $Z$ caractères produits. Le rendu de `SyntaxTree` est itératif et utilise un accumulateur unique ; son coût dépend de la taille de sortie, qui peut être quadratique avec l’indentation d’un arbre profond. Les optimisations ne suppriment pas l’explosion possible du DFA et ne constituent pas une minimisation. Les mesures archivées du 22 septembre décrivent la version précédente.
+Le rendu d’`Automaton` utilise aussi un index des arcs sortants : $O(N+E+Z)$ pour $Z$ caractères produits. Le rendu de `SyntaxTree` est itératif et utilise un accumulateur unique ; son coût dépend de la taille de sortie, qui peut être quadratique avec l’indentation d’un arbre profond. La minimisation ne supprime pas l’explosion possible pendant la déterminisation : elle intervient après construction du DFA. Les mesures de la campagne finale distinguent donc déterminisation et minimisation.
 
 [← Conception](02-conception.md) · [Accueil](../README.md) · [Validation →](04-validation.md)

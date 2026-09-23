@@ -1,6 +1,6 @@
 # Optimisations hors minimisation — 23 septembre 2026
 
-`DFAM.java` est conservé à l’identique du commit `243e8b6`. Aucune minimisation n’est implémentée par cette modification. Le contrat de recherche reste la présence d’une sous-chaîne dans chaque ligne, en unités UTF-16.
+La première étape d’optimisation préservait le placeholder `DFAM.java`. Il est maintenant remplacé par `DFAMHopcroft.java`, avec tests de conservation du langage. Le benchmark propose séparément `DFA` sans minimisation et `DFAM` avec Hopcroft. Le contrat de recherche reste la présence d’une sous-chaîne dans chaque ligne, en unités UTF-16.
 
 | Étape | Modification | Effet |
 | :--- | :--- | :--- |
@@ -19,13 +19,13 @@ Le mode `--print` conserve une ligne entière pour en restituer le début. Le mo
 
 ## Vérifications
 
-- `mvn --offline --batch-mode --no-transfer-progress -Dstyle.color=never package` : **3 673 tests Java**, aucune erreur ; JAR produit.
-- `python3 -m unittest discover -s scripts/tests -v` : **21 tests Python**, aucune erreur.
+- `mvn --offline --batch-mode --no-transfer-progress -Dstyle.color=never package` : **4 140 tests Java**, aucune erreur ; JAR produit.
+- `python3 -m unittest discover -s scripts/tests -v` : **24 tests Python**, aucune erreur.
 - Les tests génératifs comparent le nouveau chemin NFA direct, l’ancien contrat DFA et les curseurs à `Pattern.find` ou à un simulateur NFA indépendant.
 - Les sorties complètes avec numéros de lignes sont aussi comparées à l’oracle, au-delà du seul comptage.
 - Régressions sur 20 000 lettres concaténées, 20 000 groupes ou étoiles imbriqués, un alphabet de 1 536 caractères, les frontières de pages et les coupures CRLF/UTF-16.
 
-Avec `-Xmx32m`, un fichier composé d’une ligne de **48 Mio** suivie de `ab`, puis d’une ligne sans correspondance, donne le résultat **1** avec KMP et AUTOMATON. La version précédente échoue avec `OutOfMemoryError` dans les deux stratégies. Cette limite concerne le tas Java, pas toute la mémoire du processus.
+Lors de la première étape, avant Hopcroft, avec `-Xmx32m`, un fichier composé d’une ligne de **48 Mio** suivie de `ab`, puis d’une ligne sans correspondance, donne le résultat **1** avec KMP et AUTOMATON. La version précédente échoue avec `OutOfMemoryError` dans les deux stratégies. Cette limite concerne le tas Java, pas toute la mémoire du processus.
 
 ## Mesures du code optimisé
 
@@ -35,6 +35,6 @@ La nouvelle campagne sépare le temps des commandes complètes de la préparatio
 
 ## Limites restantes
 
-Un DFA peut toujours avoir une taille exponentielle. La construction à la demande, un budget d'états et un repli sur une simulation NFA restent des évolutions possibles. La minimisation est laissée intacte. Un affichage d'arbre très profond produit lui-même beaucoup de texte ; un accumulateur linéaire dans la sortie ne peut pas supprimer ce volume.
+Un DFA peut toujours avoir une taille exponentielle. La construction à la demande, un budget d'états et un repli sur une simulation NFA restent des évolutions possibles. Hopcroft minimise le DFA obtenu ; il ne supprime pas le coût de la déterminisation préalable. Un affichage d'arbre très profond produit lui-même beaucoup de texte ; un accumulateur linéaire dans la sortie ne peut pas supprimer ce volume.
 
 [← Perspectives](06-perspectives.md) · [Accueil](../README.md)

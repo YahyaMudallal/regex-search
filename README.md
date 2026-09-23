@@ -6,7 +6,7 @@
 
 **Projet algorithmique DAAR · Sorbonne · 2026**
 
-[Prise en main](#prise-en-main) · [Rapport technique](#rapport) · [Résultats expérimentaux](docs/05-experiences.md) · [Sujet](src/main/java/com/sorbonne/specifications/daar_projet1.pdf)
+[Prise en main](#prise-en-main) · [Documentation technique](#rapport) · [Résultats expérimentaux](docs/05-experiences.md) · [Sujet](src/main/java/com/sorbonne/specifications/daar_projet1.pdf)
 
 </div>
 
@@ -20,7 +20,7 @@ Deux chemins sont disponibles. Un motif littéral, comme `Elizabeth`, est recher
 
 L’intérêt du travail tient autant aux résultats qu’aux distinctions à faire pour les obtenir. Reconnaître un mot entier ne suffit pas à trouver ce mot dans une phrase. Une recherche linéaire peut nécessiter une préparation coûteuse. Un benchmark Java mesuré après le démarrage de la JVM ne se compare pas directement au temps complet d’une commande `grep`. Ces points guident l’implémentation, les tests et le protocole expérimental présenté dans ce dépôt.
 
-> **État de cette version.** La lecture des fichiers, KMP, les constructions NFA/DFA, la recherche préparée et l’affichage des lignes correspondantes fonctionnent. `DFAM.minimize()` est un point d’intégration : il renvoie encore le DFA reçu. Les mesures publiées ne décrivent donc **pas** une chaîne avec minimisation effective.
+> **État de cette version.** La lecture des fichiers, KMP, les constructions NFA/DFA, la minimisation de Hopcroft, la recherche préparée et l’affichage des lignes correspondantes fonctionnent. La campagne expérimentale distingue explicitement déterminisation, minimisation, indexation et parcours du corpus.
 
 <a id="rapport"></a>
 
@@ -76,10 +76,22 @@ Pour comparer KMP et les automates sur **le même motif** :
 
 ```bash
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' KMP
-./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' AUTOMATON
+./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' DFA
+./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' DFAM
 ```
 
 Les deux chemins trouvent **644 lignes**. Les temps affichés par ces deux appels isolés servent à examiner les étapes, pas à établir une comparaison statistique. Le chapitre expérimental utilise plusieurs répétitions.
+
+
+Le JAR expose également une interface directe :
+
+```bash
+java -jar regex-search.jar --help
+java -jar regex-search.jar --count Samples/PrideAndPrejudice.txt 'Elizabeth|Darcy' AUTO
+java -jar regex-search.jar --print Samples/PrideAndPrejudice.txt 'Elizabeth|Darcy' AUTOMATON
+```
+
+Les erreurs d’usage, de motif ou de fichier sont affichées sans stack trace avec le code de sortie `2`; une exécution valide retourne `0`.
 
 `run.sh` reste le seul script à la racine. Les autres commandes sont dans [`scripts/`](scripts/README.md). Les chemins fournis sont relatifs au répertoire depuis lequel la commande est lancée ; les scripts retrouvent eux-mêmes la racine du projet.
 
@@ -94,7 +106,7 @@ flowchart LR
     C -->|"Oui · AUTO ou KMP"| K["Table LPS de KMP"]
     C -->|"Non · ou AUTOMATON imposé"| N["NFA avec ε"]
     N --> D["DFA de recherche direct"]
-    D --> M["DFAM · identité provisoire"]
+    D --> M["DFAM · Hopcroft"]
     M --> S["Indexation des transitions"]
     K --> L["Recherche sur chaque ligne"]
     S --> L
@@ -112,9 +124,9 @@ Le choix de KMP repose sur l’arbre syntaxique. Par exemple, `a.b` contient un 
 
 ## 03 · Protocole expérimental reproductible
 
-Le profil versionné [`readme-v2`](scripts/report-profile.json) fixe les corpus, graines, options Java 21 et répétitions. Les motifs littéraux ne servent plus qu'à établir des **témoins KMP** : les expériences automate utilisent des alternatives, wildcards et une famille paramétrée `(a|b)*a(a|b)…(a|b)b` qui fait réellement croître le NFA puis le DFA de recherche. Le profil structurel (états/transitions) est collecté **hors chronométrage** et publié avec les temps.
+Le profil versionné [`report-v4-dfa-dfam-kmp-grep`](scripts/report-profile.json) compare **DFA sans minimisation, DFAM avec Hopcroft, KMP et GNU grep -E (egrep)**. Il fixe **32 cas Java**, dont 30 comparés en ligne de commande : mêmes regex, corpus, options Java 21 et répétitions. KMP participe seulement sur les littéraux `Elizabeth` et `ababababac` ; il n'est pas applicable aux opérateurs regex. `AUTOMATON` reste un alias du chemin avec minimisation pour les anciens appels.
 
-> `docs/assets/benchmark.json` fait foi pour les figures actuellement versionnées. Tant qu'une première campagne `readme-v2` n'a pas été exécutée sur un commit propre, les SVG présents peuvent encore provenir de `readme-v1`; la nouvelle campagne les remplacera tous dans une transaction unique.
+Chaque cas CLI utilise **30 processus par moteur**, avec ordre équilibré. Les étapes Java sont aussi mesurées dans **5 JVM indépendantes**, chacune avec 10 prépassages puis 10 mesures. Le [rapport des résultats](docs/assets/benchmark.md) présente les quatre moteurs côte à côte, les coûts préparation/parcours et la taille des automates avant/après Hopcroft. La série grep affichée vient du cas DFA associé ; les répétitions grep des autres cas restent dans les CSV.
 
 ```bash
 # Campagne de référence : exige un arbre Git propre.
@@ -130,13 +142,17 @@ Le profil versionné [`readme-v2`](scripts/report-profile.json) fixe les corpus,
 ./scripts/clean-report.sh
 ```
 
-Une campagne réussie suit toujours le même ordre : **préflight → tests → corpus dérivés → validation exacte contre GNU grep → profil structurel → mesures CLI → mesures JVM → agrégation → figures → publication atomique → nettoyage**. `docs/assets/` n'est remplacé qu'après toutes les vérifications ; une erreur laisse l'ancienne référence intacte. Les répertoires de travail, corpus ×8/×32 et doubles PNG sont supprimés après succès. Sans `--purge`, les CSV/TXT restent sous `target/report/results/` pour audit ; avec `--purge`, ils sont supprimés seulement après publication des SVG, `benchmark.md` et `benchmark.json`.
+Pour publier explicitement une campagne locale validée avant les commits : `./scripts/freeze-report.sh`. Le manifeste garde honnêtement `git_dirty=true` et les empreintes exactes des sources mesurées ; créer les commits ne modifie pas ces empreintes.
 
-![Commandes complètes : témoins et regex automates de complexité croissante](docs/assets/latency.svg)
+Une campagne réussie suit toujours le même ordre : **préflight → tests → corpus dérivés → validation exacte contre GNU grep → profil structurel → mesures CLI → mesures JVM → agrégation → figures → publication atomique → nettoyage**. `docs/assets/` n'est remplacé qu'après toutes les vérifications ; une erreur laisse l'ancienne référence intacte. Les corpus dérivés sont supprimés après succès ; les figures locales restent disponibles pour un essai `--allow-dirty`. Sans `--purge`, les CSV/TXT restent sous `target/report/results/` pour audit ; avec `--purge`, ils sont supprimés seulement après publication des SVG, `benchmark.md` et `benchmark.json`.
 
-![Effet du volume avec la même regex complexe et le même automate](docs/assets/scaling.svg)
+![DFA, DFAM, KMP et GNU grep : mêmes regex explicites et corpus](docs/assets/latency.svg)
 
-Le graphique `compilation.svg` utilise la famille de croissance contrôlée : profondeur 5, 7 puis 9. Sur l'implémentation actuelle, elle construit environ 66, 258 puis 1 026 états dans le DFA de recherche ; cette série est donc plus informative qu'une simple augmentation de la longueur d'un mot littéral. **DFAM reste volontairement inchangé** dans cette refonte : la minimisation reste le travail du binôme.
+![Effet du volume : Elizabeth pour les quatre moteurs, et regex complexe pour DFA, DFAM et grep](docs/assets/scaling.svg)
+
+Les motifs nullables comme `(a|b)*` utilisent le raccourci commun sans automate ; ils ne mesurent donc pas Hopcroft.
+
+Le graphique `compilation.svg` utilise la famille de croissance contrôlée : profondeur 5, 7 puis 9. Elle construit environ 66, 258 puis 1 026 états dans le DFA de recherche avant minimisation ; cette série est donc plus informative qu'une simple augmentation de la longueur d'un mot littéral. La campagne publie désormais aussi le nombre d'états/transitions après `DFAM` et le coût propre de la minimisation.
 
 Pour produire le rendu final, le packaging part uniquement des fichiers suivis par Git et du JAR compilé :
 
@@ -173,8 +189,8 @@ regex-search/
 
 Les tests ne sont pas seulement des exemples heureux. Ils couvrent aussi les correspondances qui se chevauchent, les cycles ε, les transitions ambiguës, les caractères échappés, les lignes vides et les erreurs d’entrée-sortie. Les cas générés utilisent des graines fixes ; leur fonctionnement et leurs limites sont expliqués dans le [chapitre de validation](docs/04-validation.md).
 
-## 05 · Ce qui reste à terminer
+## 05 · État du rendu
 
-La priorité est d’implémenter la minimisation, puis de vérifier qu’elle préserve le langage et respecte les classes de caractères du DFA. Le mode d’affichage des lignes est disponible via `scripts/search.sh`.
+La chaîne algorithmique est complète jusqu’à la minimisation de Hopcroft et les tests de préservation du langage. Le mode d’affichage des lignes est disponible via `scripts/search.sh`; le rapport LaTeX et le packaging final sont produits à partir de la campagne reproductible.
 
 Le dossier `docs/` est volontairement plus développé qu’un rapport de remise. Le [sujet](src/main/java/com/sorbonne/specifications/daar_projet1.pdf) conseille 5 à 10 pages et impose une limite de 12 pages : le [plan de synthèse](docs/06-perspectives.md#rendu) indique quoi conserver dans ce format. La documentation étendue et les données expérimentales peuvent accompagner le rendu sans être confondues avec ce document limité en pages.

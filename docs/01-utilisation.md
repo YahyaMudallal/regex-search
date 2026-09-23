@@ -85,17 +85,20 @@ Les trois arguments sont le chemin du fichier, l’expression régulière et une
 | :---------- | :----------------------------------------------------------------------------- |
 | `AUTO`      | Analyse l’arbre et choisit KMP si le motif est une concaténation de lettres    |
 | `KMP`       | Impose KMP ; une expression non littérale est refusée                          |
-| `AUTOMATON` | Impose NFA → DFA → DFAM → préparation de la recherche, même pour un mot simple |
+| `DFA` | Impose le DFA de recherche sans minimisation |
+| `DFAM` | Applique Hopcroft au même DFA avant indexation |
+| `AUTOMATON` | Alias du chemin DFAM, conservé pour compatibilité |
 
 ```bash
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' KMP
-./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' AUTOMATON
+./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' DFA
+./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' DFAM
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Eli.*beth'
 ```
 
 Le script compile avant le lancement. Cette compilation n’entre pas dans les durées affichées. La mesure Java comprend l’analyse du motif, les étapes de préparation exécutées et le parcours du fichier. Le démarrage de la JVM n’appartient pas au chronomètre interne de `Benchmark`.
 
-La sortie indique le moteur choisi, le nombre total de lignes et le nombre de lignes correspondantes. Elle décompose aussi la préparation. La durée de DFAM ne représente, pour le moment, qu’un appel retournant la même référence d’automate.
+La sortie indique le moteur choisi, le nombre total de lignes et le nombre de lignes correspondantes. Elle décompose aussi la préparation. La durée de DFAM mesure Hopcroft ; elle vaut exactement zéro pour la stratégie DFA et pour le raccourci des motifs acceptant le mot vide.
 
 ### Appeler directement Main
 
@@ -168,7 +171,7 @@ Le protocole suit sept phases ordonnées :
 1. vérifier Git et les prérequis, nettoyer les sorties locales, compiler et lancer les tests ;
 2. reconstruire les corpus dérivés puis vérifier leur empreinte ;
 3. comparer **octet par octet** les sorties numérotées Java et `grep -E -n` ;
-4. compter hors chronométrage les états/transitions du NFA et du DFA de recherche ;
+4. compter hors chronométrage les états/transitions du NFA, du DFA de recherche et du DFAM ;
 5. mesurer les commandes complètes avec ordre équilibré ;
 6. mesurer les phases dans plusieurs JVM indépendantes puis recalculer les résumés ;
 7. tracer, vérifier les empreintes, publier `docs/assets/` atomiquement et supprimer les fichiers temporaires.
@@ -177,13 +180,15 @@ Le protocole suit sept phases ordonnées :
 | :--- | :--- |
 | `target/report/results/report.md` | Regex développées, statistiques, structure des automates et limites |
 | `target/report/results/campaign.json` | Paramètres, Git HEAD/dirty, versions, commandes, empreintes et contrôles |
-| `target/report/results/automata.csv` | Longueur de regex, états/arcs NFA et DFA de recherche |
+| `target/report/results/automata.csv` | Longueur de regex, états/arcs NFA, DFA de recherche et DFAM |
 | `target/report/results/cli.csv`, `jvm.csv` | Toutes les observations, y compris les prépassages |
 | `target/report/results/*-summary.csv` | Statistiques recalculables depuis les observations |
 | `target/report/results/validation.txt` | Sortie des tests Java/Python |
 | `docs/assets/` | Six SVG, `benchmark.md` et `benchmark.json` utilisés directement par les Markdown |
 
-La publication est transactionnelle : les assets existants ne sont remplacés qu'après validation complète. Un échec conserve donc la référence précédente. `--allow-dirty` autorise un essai exploratoire mais interdit la publication dans `docs/assets/`. `--purge` supprime les CSV et TXT **après** la publication ; `benchmark.md`, `benchmark.json`, les SVG et le rapport local restent disponibles.
+La publication est transactionnelle : les assets existants ne sont remplacés qu'après validation complète. Un échec conserve donc la référence précédente. `--allow-dirty` garde les résultats locaux sans publication automatique ; une publication explicite par `freeze-report.sh` reste possible après vérification des sources et des figures. `--purge` supprime les CSV et TXT **après** la publication ; `benchmark.md`, `benchmark.json`, les SVG et le rapport local restent disponibles.
+
+Le profil compare 32 cas Java en DFA/DFAM, avec KMP ajouté aux littéraux. GNU grep est le témoin externe pour les 30 cas CLI. Voir les [regex et le protocole](05-experiences.md).
 
 Pour retracer manuellement une campagne locale non purgée :
 

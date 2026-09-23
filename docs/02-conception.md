@@ -72,7 +72,7 @@ flowchart TB
         PARSE --> KMP["KMPSearch.Prepared"]
         PARSE --> NFA["NFA"]
         NFA --> DFA["DFA de recherche direct"]
-        DFA --> DFAM["DFAM · provisoire"]
+        DFA --> DFAM["DFAM · Hopcroft"]
         DFAM --> SEARCH["NativeSearch.Prepared"]
     end
     subgraph Modèle["Graphe d'automate"]
@@ -146,3 +146,7 @@ Le temps de parcours inclut **ouverture, lecture, décodage, recherche, comptage
 En cas d’erreur, le pipeline ne rend pas un compte partiel présenté comme un succès. La fermeture du lecteur est assurée par `try-with-resources`.
 
 [← Utilisation](01-utilisation.md) · [Accueil](../README.md) · [Algorithmes →](03-algorithmes.md)
+
+## Stratégies mesurées séparément
+
+`DFA` et `DFAM` construisent le même NFA puis le même DFA de recherche. `DFA` l’indexe immédiatement ; `DFAM` appelle `DFAMHopcroft.minimize` avant la même indexation. `KMP` exige un littéral. `AUTO` sélectionne KMP pour les littéraux, sinon le chemin `AUTOMATON`, conservé comme alias avec minimisation. Un motif nullable utilise le raccourci commun, sans construction ni minimisation.

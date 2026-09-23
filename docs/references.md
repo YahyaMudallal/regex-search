@@ -14,7 +14,7 @@ Ce document fixe le périmètre : opérateurs retenus, stratégie par automates,
 **_Patterns, Automata, and Regular Expressions_, chapitre 10 fourni.**  
 [PDF local](../src/main/java/com/sorbonne/specifications/ch10.pdf).
 
-Les sections 10.2–10.4 présentent les automates et la construction des sous-ensembles. Les sections 10.5–10.8 relient les expressions régulières aux automates. Le sujet et la classe NFA désignent cette construction par la référence Aho–Ullman.
+Les sections 10.2–10.4 présentent les automates et la construction des sous-ensembles. À la fin de la section 10.4 (p. 555–556 du PDF), le passage **« Minimization of Automata »** définit l'équivalence d'états par la séparation final/non-final puis par propagation à travers les transitions, et demande de compléter un DFA partiel par un *dead state*. `DFAM` respecte cette définition ; l'algorithme de Hopcroft est utilisé comme méthode de raffinement plus efficace. Les sections 10.5–10.8 relient ensuite les expressions régulières aux automates.
 
 ## 2. Références algorithmiques et techniques
 
@@ -51,7 +51,7 @@ Les autres textes du répertoire `Samples/` constituent des instances disponible
 | Versions de compilation et de test | [pom.xml](../pom.xml) |
 | Construction NFA | [NFA.java](../src/main/java/com/sorbonne/regex/NFA.java) |
 | Sous-ensembles et classes de caractères | [DFA.java](../src/main/java/com/sorbonne/regex/DFA.java) |
-| Minimisation encore provisoire | [DFAM.java](../src/main/java/com/sorbonne/regex/DFAM.java) |
+| Minimisation de Hopcroft | [DFAMHopcroft.java](../src/main/java/com/sorbonne/regex/DFAMHopcroft.java) |
 | Recherche de facteur par automate | [NativeSearch.java](../src/main/java/com/sorbonne/search/NativeSearch.java) |
 | Préparation et parcours KMP | [KMPSearch.java](../src/main/java/com/sorbonne/search/KMPSearch.java) |
 | Frontières du chronométrage Java | [Benchmark.java](../src/main/java/com/sorbonne/benchmark/Benchmark.java) |
