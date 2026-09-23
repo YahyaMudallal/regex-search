@@ -34,7 +34,7 @@ Un automate correct pour la première opération n’est donc pas, à lui seul, 
 
 ## 2. Le périmètre des expressions
 
-Le [sujet](../src/main/java/com/sorbonne/specifications/daar_projet1.pdf) retient un sous-ensemble des ERE : lettres ASCII, concaténation, alternative, étoile, parenthèses et point universel. L’implémentation Java manipule plus généralement des unités UTF-16 ; cela ne signifie pas qu’elle implémente toute la norme ERE ni une sémantique Unicode par point de code.
+Le [sujet](../src/main/java/com/sorbonne/specifications/daar_projet1.pdf) retient un sous-ensemble des ERE : lettres ASCII, concaténation, alternative, étoile, parenthèses et point universel. Nous fixons donc explicitement l'alphabet d'exécution à $\Sigma=\{0,\ldots,255\}$ : le motif est ASCII, tandis que le fichier est parcouru comme une suite d'octets. Cette décision rend la sémantique du point simple et précise : `.` consomme exactement un octet.
 
 | Construction | Exemple | Sens |
 | :--- | :--- | :--- |
@@ -102,9 +102,9 @@ Deux états ayant le même nom sont deux états distincts. `State` conserve l’
 
 Trois types sont distingués :
 
-- `CHARACTER` consomme un `char` précis ;
+- `CHARACTER` consomme une valeur précise de `0` à `255` ;
 - `EPSILON` ne consomme aucun caractère ;
-- `ANY` consomme un `char`, sauf les caractères éventuellement exclus.
+- `ANY` consomme n’importe quelle valeur de `0` à `255`, sauf les symboles éventuellement exclus.
 
 Le point littéral et le point universel n’ont pas la même représentation. Les exclusions d’un arc `ANY` servent à construire des classes de caractères disjointes dans le DFA. Elles ne constituent pas une implémentation de la syntaxe ERE des classes `[ ... ]`.
 
@@ -129,11 +129,9 @@ La table LPS de KMP n’est pas reconstruite entre ces deux appels. `NativeSearc
 
 ## 5. Entrées-sorties et mémoire
 
-`FileLoader.open` ouvre un fichier ordinaire avec un décodeur UTF-8 strict et un `BufferedReader` de **65 536 caractères**. Un encodage invalide déclenche une erreur ; il n’est pas remplacé silencieusement par un caractère de substitution qui pourrait changer le résultat de la recherche.
+`FileLoader` possède désormais un seul modèle d’entrée-sortie : des blocs de **65 536 octets** lus directement depuis le fichier. Il n’existe aucune phase de décodage dans le chemin de recherche. Le mode `--count` transmet ces blocs au curseur préparé ; le mode `--print` conserve seulement les octets de la ligne courante afin de les restituer tels quels lorsqu’elle correspond. LF, CR et CRLF délimitent les lignes ; toutes les autres valeurs d’octet appartiennent au contenu.
 
-Le tampon réduit le nombre de petits accès au lecteur sous-jacent. Sa taille est un compromis de mise en œuvre, **pas une valeur démontrée optimale** : aucune campagne ne compare ici plusieurs tailles de tampon.
-
-Le comptage utilise `FileLoader.count` : lecture par blocs et conservation du seul état du moteur, sans allocation d’une chaîne par ligne. Sa mémoire de parcours dépend du tampon, même pour une ligne de plusieurs centaines de mégaoctets. Le mode d’affichage utilise encore `readLine()` pour restituer la ligne complète.
+La taille du tampon reste un compromis de mise en œuvre, **pas une valeur démontrée optimale**. Le comptage conserve seulement le tampon et l’état du moteur, sans allocation d’une chaîne par ligne ; sa mémoire de parcours est donc indépendante de la longueur d’une ligne. Le mode d’affichage utilise encore `readLine()` car il doit restituer la ligne complète.
 
 Les séparateurs LF, CRLF et CR sont reconnus, même lorsqu’un CRLF traverse deux blocs. Une dernière ligne sans séparateur final est traitée. Une fin de fichier immédiatement après un LF ne crée pas de ligne vide supplémentaire.
 
@@ -149,4 +147,4 @@ En cas d’erreur, le pipeline ne rend pas un compte partiel présenté comme un
 
 ## Stratégies mesurées séparément
 
-`DFA` et `DFAM` construisent le même NFA puis le même DFA de recherche. `DFA` l’indexe immédiatement ; `DFAM` appelle `DFAMHopcroft.minimize` avant la même indexation. `KMP` exige un littéral. `AUTO` sélectionne KMP pour les littéraux, sinon le chemin `AUTOMATON`, conservé comme alias avec minimisation. Un motif nullable utilise le raccourci commun, sans construction ni minimisation.
+`DFA` et `DFAM` construisent le même NFA puis le même DFA de recherche. `DFA` l’indexe immédiatement ; `DFAM` appelle le point d’entrée public `DFAM.minimize`, qui délègue à Hopcroft, avant la même indexation. `KMP` exige un littéral. `AUTO` sélectionne KMP pour les littéraux, sinon le chemin `AUTOMATON`, conservé comme alias avec minimisation. Un motif nullable utilise le raccourci commun, sans construction ni minimisation.

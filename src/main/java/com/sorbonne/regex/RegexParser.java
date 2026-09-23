@@ -100,7 +100,13 @@ public class RegexParser {
         operands.push(new SyntaxTree(left, right, operator));
     }
 
-    /** Tokenise les unités UTF-16 ; un échappement final reste un antislash littéral. */
+    /** Tokenise le sous-ensemble ASCII ; un échappement final reste un antislash littéral. */
+    private static void requireAscii(char symbol) {
+        if (symbol > 0x7f) {
+            throw new IllegalArgumentException("Le motif doit appartenir a l'alphabet ASCII");
+        }
+    }
+
     protected static List<SyntaxTree> initSyntaxTreeList(String regex) {
         List<SyntaxTree> result = new ArrayList<>();
         if (regex == null) {
@@ -108,12 +114,21 @@ public class RegexParser {
         }
         for (int i = 0; i < regex.length(); i++) {
             char symbol = regex.charAt(i);
+            requireAscii(symbol);
             if (symbol == '\\') {
-                if (i + 1 < regex.length()) {
-                    symbol = regex.charAt(++i);
+                if (i + 1 >= regex.length()) {
+                    throw new IllegalArgumentException("Echappement final incomplet");
+                }
+                symbol = regex.charAt(++i);
+                requireAscii(symbol);
+                if (".*|()\\".indexOf(symbol) < 0) {
+                    throw new IllegalArgumentException("Echappement non pris en charge : \\" + symbol);
                 }
                 result.add(new SyntaxTree(String.valueOf(symbol)));
                 continue;
+            }
+            if ("+?[]{}^$".indexOf(symbol) >= 0) {
+                throw new IllegalArgumentException("Operateur ERE non pris en charge : " + symbol);
             }
             NodeType type = switch (symbol) {
                 case '(' -> NodeType.OPEN_PARENTHESE;

@@ -32,7 +32,7 @@ class MainTest {
      */
     @Test
     void countModePrintsOnlyMatchingLineCount() throws Exception {
-        Path file = Files.writeString(directory.resolve("texte avec espaces.txt"), "ab ab\nx\nab");
+        Path file = Files.writeString(directory.resolve("texte avec espaces.txt"), "ab ab\nx\nab", StandardCharsets.US_ASCII);
         for (String strategy : new String[] { "AUTO", "KMP", "DFA", "DFAM", "AUTOMATON" }) {
             assertEquals("2" + System.lineSeparator(), capture("--count", file.toString(), "ab", strategy));
         }
@@ -45,9 +45,9 @@ class MainTest {
      */
     @Test
     void countModeSupportsNoMatchesAndEmptyFile() throws Exception {
-        Path file = Files.writeString(directory.resolve("empty.txt"), "");
+        Path file = Files.writeString(directory.resolve("empty.txt"), "", StandardCharsets.US_ASCII);
         assertEquals("0" + System.lineSeparator(), capture("--count", file.toString(), "a*"));
-        Files.writeString(file, "bbb\nccc");
+        Files.writeString(file, "bbb\nccc", StandardCharsets.US_ASCII);
         assertEquals("0" + System.lineSeparator(), capture("--count", file.toString(), "a"));
     }
 
@@ -68,12 +68,12 @@ class MainTest {
     void countModeRequiresFileAndPattern() {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         ByteArrayOutputStream errors = new ByteArrayOutputStream();
-        try (PrintStream out = new PrintStream(output, true, StandardCharsets.UTF_8);
-                PrintStream err = new PrintStream(errors, true, StandardCharsets.UTF_8)) {
+        try (PrintStream out = new PrintStream(output, true, StandardCharsets.ISO_8859_1);
+                PrintStream err = new PrintStream(errors, true, StandardCharsets.ISO_8859_1)) {
             assertEquals(2, Main.runCommand(new String[] { "--count" }, out, err));
         }
-        org.junit.jupiter.api.Assertions.assertTrue(errors.toString(StandardCharsets.UTF_8).contains("Usage :"));
-        assertEquals("", output.toString(StandardCharsets.UTF_8));
+        org.junit.jupiter.api.Assertions.assertTrue(errors.toString(StandardCharsets.ISO_8859_1).contains("Usage :"));
+        assertEquals("", output.toString(StandardCharsets.ISO_8859_1));
     }
 
     /** Les erreurs CLI attendues restent concises et ne produisent pas de stack trace. */
@@ -81,15 +81,15 @@ class MainTest {
     void invalidStrategyReturnsUsageError() {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         ByteArrayOutputStream errors = new ByteArrayOutputStream();
-        try (PrintStream out = new PrintStream(output, true, StandardCharsets.UTF_8);
-                PrintStream err = new PrintStream(errors, true, StandardCharsets.UTF_8)) {
+        try (PrintStream out = new PrintStream(output, true, StandardCharsets.ISO_8859_1);
+                PrintStream err = new PrintStream(errors, true, StandardCharsets.ISO_8859_1)) {
             assertEquals(2, Main.runCommand(new String[] { "fichier.txt", "abc", "INCONNUE" }, out, err));
         }
-        String message = errors.toString(StandardCharsets.UTF_8);
+        String message = errors.toString(StandardCharsets.ISO_8859_1);
         org.junit.jupiter.api.Assertions.assertTrue(message.contains("Stratégie inconnue"));
         org.junit.jupiter.api.Assertions.assertTrue(message.contains("AUTO, KMP, DFA, DFAM, AUTOMATON"));
         org.junit.jupiter.api.Assertions.assertFalse(message.contains("Exception"));
-        assertEquals("", output.toString(StandardCharsets.UTF_8));
+        assertEquals("", output.toString(StandardCharsets.ISO_8859_1));
     }
 
     /**
@@ -98,7 +98,7 @@ class MainTest {
      */
     @Test
     void printModeDisplaysMatchingLinesWithNumbers() throws Exception {
-        Path file = Files.writeString(directory.resolve("print.txt"), "avant\nabc abc\napres\nabc\n");
+        Path file = Files.writeString(directory.resolve("print.txt"), "avant\nabc abc\napres\nabc\n", StandardCharsets.US_ASCII);
 
         assertEquals("2:abc abc" + System.lineSeparator() + "4:abc" + System.lineSeparator(),
                 capture("--print", file.toString(), "abc", "KMP"));
@@ -110,7 +110,7 @@ class MainTest {
      */
     @Test
     void printModeSupportsAutomatonAndNoMatch() throws Exception {
-        Path file = Files.writeString(directory.resolve("print-regex.txt"), "ab\naxb\nccc\n");
+        Path file = Files.writeString(directory.resolve("print-regex.txt"), "ab\naxb\nccc\n", StandardCharsets.US_ASCII);
 
         assertEquals("2:axb" + System.lineSeparator(),
                 capture("--print", file.toString(), "a.b", "AUTOMATON"));
@@ -128,12 +128,12 @@ class MainTest {
     private static String capture(String... arguments) throws Exception {
         PrintStream original = System.out;
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        try (PrintStream output = new PrintStream(bytes, true, StandardCharsets.UTF_8)) {
+        try (PrintStream output = new PrintStream(bytes, true, StandardCharsets.ISO_8859_1)) {
             System.setOut(output);
             Main.main(arguments);
         } finally {
             System.setOut(original);
         }
-        return bytes.toString(StandardCharsets.UTF_8);
+        return bytes.toString(StandardCharsets.ISO_8859_1);
     }
 }

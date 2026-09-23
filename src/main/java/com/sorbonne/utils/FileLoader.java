@@ -1,98 +1,102 @@
 package com.sorbonne.utils;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Arrays;
 import java.util.Objects;
+
 import com.sorbonne.search.SearchCursor;
 
-/** Ouvre les fichiers texte en UTF-8 sans charger leur contenu entier en mémoire. */
+/** Lecture bufferisee des fichiers comme suites d'octets, sans conversion de caracteres. */
 public final class FileLoader {
-    /** Tampon de 64 K caractères ; un compromis à mesurer selon la machine et le corpus. */
     private static final int BUFFER_SIZE = 64 * 1024;
 
-    /** Classe utilitaire sans instance. */
     private FileLoader() {
-    }
-
-    /**
-     * Ouvre un lecteur bufferisé que l'appelant doit fermer avec try-with-resources.
-     *
-     * <p>Le décodeur signale les séquences UTF-8 invalides au lieu de les remplacer.
-     * {@link BufferedReader#readLine()} retire les séparateurs LF, CR ou CRLF ;
-     * une dernière ligne sans séparateur est également lue. Le tampon limite
-     * les petits accès, mais une ligne très longue doit encore tenir en mémoire.</p>
-     *
-     * @param file fichier ordinaire à ouvrir, éventuellement via un lien symbolique
-     * @return lecteur prêt à parcourir le texte ; aucun contenu n'est encore lu
-     * @throws IOException si le fichier est absent, inaccessible ou n'est pas ordinaire
-     * @throws NullPointerException si le chemin est nul
-     */
-    public static BufferedReader open(Path file) throws IOException {
-        Objects.requireNonNull(file, "Le fichier ne doit pas être nul");
-        if (!Files.readAttributes(file, BasicFileAttributes.class).isRegularFile()) {
-            throw new IOException("Le chemin ne désigne pas un fichier ordinaire : " + file);
-        }
-        return new BufferedReader(new InputStreamReader(Files.newInputStream(file),
-                StandardCharsets.UTF_8.newDecoder()), BUFFER_SIZE);
     }
 
     /** Compteurs sans stockage du contenu des lignes. */
     public record Counts(long totalLines, long matchingLines) {
     }
 
-    /** O(C + L) temps et O(B) mémoire hors moteur, même pour une très longue ligne. */
-    public static Counts count(Path file, SearchCursor cursor) throws IOException {
-        try (BufferedReader reader = open(file)) {
-            return count(reader, cursor);
-        }
+    /** Consommateur d'une ligne brute, sans son separateur. */
+    @FunctionalInterface
+    public interface MatchingLineConsumer {
+        void accept(long lineNumber, byte[] line, int length) throws IOException;
     }
 
     /**
-     * Parcours par blocs ; mêmes frontières LF, CR et CRLF que readLine().
-     * Le lecteur fourni reste ouvert. Toutes les données sont décodées même
-     * après une correspondance, afin de conserver les erreurs UTF-8.
+     * Parcourt directement les octets du fichier. LF, CR et CRLF delimitent les lignes.
+     * Le moteur recoit des blocs contigus sans copie et le cout hors recherche reste O(C + L).
      */
-    public static Counts count(Reader reader, SearchCursor cursor) throws IOException {
-        Objects.requireNonNull(reader);
-        Objects.requireNonNull(cursor);
+    public static Counts count(Path file, SearchCursor cursor) throws IOException {
+        Objects.requireNonNull(file, "Le fichier ne doit pas etre nul");
+        Objects.requireNonNull(cursor, "Le curseur ne doit pas etre nul");
+        requireRegularFile(file);
+        try (InputStream input = Files.newInputStream(file)) {
+            return count(input, cursor);
+        }
+    }
+
+    /** Variante testable sur un flux deja ouvert ; le flux reste ouvert. */
+    static Counts count(InputStream input, SearchCursor cursor) throws IOException {
+        Objects.requireNonNull(input, "Le flux ne doit pas etre nul");
+        Objects.requireNonNull(cursor, "Le curseur ne doit pas etre nul");
         cursor.reset();
-        char[] buffer = new char[BUFFER_SIZE];
+        byte[] buffer = new byte[BUFFER_SIZE];
         long lines = 0;
         long matching = 0;
         boolean hasContent = false;
         boolean afterCR = false;
         boolean found = cursor.matches();
+
         int length;
-        while ((length = reader.read(buffer)) != -1) {
-            for (int i = 0; i < length; i++) {
-                char symbol = buffer[i];
-                if (afterCR && symbol == '\n') {
-                    afterCR = false;
-                    continue;
+        while ((length = input.read(buffer)) != -1) {
+            int index = 0;
+            if (afterCR) {
+                if (length > 0 && buffer[0] == '\n') {
+                    index = 1;
                 }
-                afterCR = symbol == '\r';
-                if (symbol == '\r' || symbol == '\n') {
-                    lines++;
-                    if (found) {
-                        matching++;
-                    }
-                    hasContent = false;
-                    cursor.reset();
-                    found = cursor.matches();
-                } else {
+                afterCR = false;
+            }
+
+            while (index < length) {
+                int start = index;
+                while (index < length && buffer[index] != '\r' && buffer[index] != '\n') {
+                    index++;
+                }
+                int runLength = index - start;
+                if (runLength > 0) {
                     hasContent = true;
                     if (!found) {
-                        found = cursor.accept(symbol);
+                        found = cursor.accept(buffer, start, runLength);
+                    }
+                }
+                if (index == length) {
+                    break;
+                }
+
+                byte separator = buffer[index++];
+                lines++;
+                if (found) {
+                    matching++;
+                }
+                hasContent = false;
+                cursor.reset();
+                found = cursor.matches();
+
+                if (separator == '\r') {
+                    if (index < length && buffer[index] == '\n') {
+                        index++;
+                    } else if (index == length) {
+                        afterCR = true;
                     }
                 }
             }
         }
+
         if (hasContent) {
             lines++;
             if (found) {
@@ -100,5 +104,101 @@ public final class FileLoader {
             }
         }
         return new Counts(lines, matching);
+    }
+
+    /**
+     * Meme parcours que {@link #count(Path, SearchCursor)}, mais conserve uniquement
+     * la ligne courante pour pouvoir restituer exactement ses octets lorsqu'elle correspond.
+     */
+    public static Counts forEachMatchingLine(Path file, SearchCursor cursor,
+            MatchingLineConsumer consumer) throws IOException {
+        Objects.requireNonNull(file, "Le fichier ne doit pas etre nul");
+        Objects.requireNonNull(cursor, "Le curseur ne doit pas etre nul");
+        Objects.requireNonNull(consumer, "Le consommateur ne doit pas etre nul");
+        requireRegularFile(file);
+
+        cursor.reset();
+        byte[] inputBuffer = new byte[BUFFER_SIZE];
+        byte[] line = new byte[256];
+        int lineLength = 0;
+        long lines = 0;
+        long matching = 0;
+        boolean hasContent = false;
+        boolean afterCR = false;
+        boolean found = cursor.matches();
+
+        try (InputStream input = Files.newInputStream(file)) {
+            int length;
+            while ((length = input.read(inputBuffer)) != -1) {
+                int index = 0;
+                if (afterCR) {
+                    if (length > 0 && inputBuffer[0] == '\n') {
+                        index = 1;
+                    }
+                    afterCR = false;
+                }
+
+                while (index < length) {
+                    int start = index;
+                    while (index < length && inputBuffer[index] != '\r' && inputBuffer[index] != '\n') {
+                        index++;
+                    }
+                    int runLength = index - start;
+                    if (runLength > 0) {
+                        hasContent = true;
+                        int needed = lineLength + runLength;
+                        if (needed > line.length) {
+                            int capacity = line.length;
+                            while (capacity < needed) {
+                                capacity = Math.max(capacity << 1, needed);
+                            }
+                            line = Arrays.copyOf(line, capacity);
+                        }
+                        System.arraycopy(inputBuffer, start, line, lineLength, runLength);
+                        lineLength = needed;
+                        if (!found) {
+                            found = cursor.accept(inputBuffer, start, runLength);
+                        }
+                    }
+                    if (index == length) {
+                        break;
+                    }
+
+                    byte separator = inputBuffer[index++];
+                    lines++;
+                    if (found) {
+                        matching++;
+                        consumer.accept(lines, line, lineLength);
+                    }
+                    hasContent = false;
+                    lineLength = 0;
+                    cursor.reset();
+                    found = cursor.matches();
+
+                    if (separator == '\r') {
+                        if (index < length && inputBuffer[index] == '\n') {
+                            index++;
+                        } else if (index == length) {
+                            afterCR = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (hasContent) {
+            lines++;
+            if (found) {
+                matching++;
+                consumer.accept(lines, line, lineLength);
+            }
+        }
+        return new Counts(lines, matching);
+    }
+
+    private static void requireRegularFile(Path file) throws IOException {
+        if (!Files.readAttributes(file, BasicFileAttributes.class).isRegularFile()) {
+            throw new IOException("Le chemin ne designe pas un fichier ordinaire : " + file);
+        }
     }
 }

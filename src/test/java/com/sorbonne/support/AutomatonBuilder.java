@@ -101,7 +101,7 @@ public final class AutomatonBuilder {
     /**
      * Construit un DFA en chaîne pour une String littérale, y compris vide.
      * Aucun caractère n'est interprété comme une expression régulière.
-     * @param pattern motif en unités UTF-16
+     * @param pattern motif en symboles 8 bits
      * @return automate acceptant exactement ce mot complet
      */
     public static Automaton literal(String pattern) {

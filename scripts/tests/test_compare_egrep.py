@@ -17,39 +17,35 @@ class ComparisonProtocolTest(unittest.TestCase):
 
     def test_common_regex_language(self):
         """Accepte les opérateurs communs et les caractères spéciaux échappés."""
-        for expression in ["Elizabeth|Darcy", "a(b|c)*", "a.b", "(a*)*", r"a\.b", r"\*\|\(\)\\", "été", "-word"]:
+        for expression in ["Elizabeth|Darcy", "a(b|c)*", "a.b", "(a*)*", r"a\.b", r"\*\|\(\)\\", "word", "-word"]:
             with self.subTest(expression=expression):
                 benchmark.validate_expression(expression)
 
     def test_rejects_incompatible_or_invalid_regex(self):
         """Refuse les extensions non implémentées et les syntaxes ambiguës."""
         for expression in ["", "a+", "a?", "[ab]", "a{2}", "^a", "a$", r"\b", "a\\", "a**", "*a",
-                           "()", "(a", "a)", "a|", "|a", "a||b", "a(|b)", "a\nb", "a\0", "😀"]:
+                           "()", "(a", "a)", "a|", "|a", "a||b", "a(|b)", "a\nb", "a\0", "é", "😀"]:
             with self.subTest(expression=expression), self.assertRaises(ValueError):
                 benchmark.validate_expression(expression)
 
     def test_normalization_preserves_lines_and_source(self):
-        """Normalise les séparateurs sans ajouter de dernière ligne ni modifier la source."""
+        """Normalise les separateurs au niveau octet sans modifier la source."""
         with tempfile.TemporaryDirectory() as temporary:
-            source, target = Path(temporary) / "source.txt", Path(temporary) / "copy.txt"
-            for original, expected in [(b"", b""), (b"\r\n", b"\n"),
-                                       ("été\r\na\rb\n\nlast".encode(), "été\na\nb\n\nlast".encode())]:
-                with self.subTest(original=original):
+            source, target = Path(temporary) / "source.bin", Path(temporary) / "copy.bin"
+            cases = [
+                (b"", b""),
+                (b"\r\n", b"\n"),
+                (b"\x80\xff\r\na\rb\n\nlast", b"\x80\xff\na\nb\n\nlast"),
+                (bytes(range(256)), bytes(range(13)) + b"\n" + bytes(range(14, 256))),
+            ]
+            for original, expected in cases:
+                with self.subTest(length=len(original)):
                     source.write_bytes(original)
                     info = benchmark.prepare_corpus(source, target)
                     self.assertEqual(original, source.read_bytes())
                     self.assertEqual(expected, target.read_bytes())
                     self.assertEqual(len(expected), info["bytes"])
                     self.assertEqual(benchmark.hashlib.sha256(expected).hexdigest(), info["sha256"])
-
-    def test_rejects_unsupported_text(self):
-        """Ne compare pas des unités de caractères différentes ni du texte UTF-8 invalide."""
-        with tempfile.TemporaryDirectory() as temporary:
-            source, target = Path(temporary) / "source.txt", Path(temporary) / "copy.txt"
-            for data in [b"a\0b", b"\xff", "😀".encode()]:
-                with self.subTest(data=data), self.assertRaises(ValueError):
-                    source.write_bytes(data)
-                    benchmark.prepare_corpus(source, target)
 
     @patch.object(benchmark.subprocess, "run")
     def test_grep_no_match_is_not_an_error(self, execute):

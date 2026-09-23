@@ -1,40 +1,70 @@
-# Optimisations hors minimisation — 23 septembre 2026
+[← Perspectives](06-perspectives.md) · [Accueil](../README.md)
 
-La première étape d’optimisation préservait le placeholder `DFAM.java`. Il est maintenant remplacé par `DFAMHopcroft.java`, avec tests de conservation du langage. Le benchmark propose séparément `DFA` sans minimisation et `DFAM` avec Hopcroft. Le contrat de recherche reste la présence d’une sous-chaîne dans chaque ligne, en unités UTF-16.
+# 07 — Optimisations du chemin chaud
 
-| Étape | Modification | Effet |
-| :--- | :--- | :--- |
-| Analyse syntaxique | Deux piles, priorités explicites, sans réduction répétée de listes | Temps et mémoire O(m), sans récursion |
-| NFA | Parcours postordre itératif, fragments dans un graphe commun | Construction O(m), sans copie de sous-graphes |
-| DFA | Bitsets, arcs séparés par type, alphabet local à chaque sous-ensemble | Moins de calculs et d’arcs inutiles ; pire cas exponentiel conservé |
-| Préparation de recherche | NFA → DFA de recherche, arrêt de construction aux états acceptants | Une seule déterminisation dans le pipeline |
-| Motif nullable | Calcul sur l’arbre, résultat vrai pour chaque ligne | Aucun automate construit dans le pipeline |
-| Exécution DFA | États entiers, classification des caractères et pages de transitions | Accès directs O(1) par char, pas de matrice dense systématique |
-| KMP | Parcours simplifié, rejet des textes trop courts, curseur réutilisable | Temps O(m+n) conservé |
-| Comptage | Lecture par blocs, curseur réinitialisé aux séparateurs | Mémoire O(B) hors motif préparé, indépendante de la longueur des lignes |
-| Diagnostic | Index des arcs sortants, accumulateur unique pour l’arbre | Coût proportionnel au graphe/arbre et au texte produit |
-| Campagne | Normalisation, réplication et SHA-256 par blocs | Le corpus source entier ne reste plus en mémoire |
+Le profilage a montré que la minimisation réduit parfois fortement la taille du graphe sans réduire le nombre de symboles à lire. Le travail de performance porte donc d’abord sur la **boucle exécutée pour chaque octet du fichier**. Le sujet imposant des motifs ASCII, le moteur de production utilise désormais un alphabet fixe de **256 valeurs** et lit les fichiers directement sous forme de `byte[]`.
 
-Le mode `--print` conserve une ligne entière pour en restituer le début. Le mode `--count` utilise les blocs. Les LF, CRLF, CR, dernières lignes sans séparateur et erreurs UTF-8 restent pris en charge. Le comptage continue de décoder le fichier après une correspondance.
+## 1. Décisions appliquées
 
-## Vérifications
+| Zone | Représentation précédente | Représentation actuelle | Effet recherché |
+| :--- | :--- | :--- | :--- |
+| Alphabet de scan | domaine plus large que nécessaire | `0..255` | modèle conforme au besoin et borné |
+| Transition DFA | classification puis plusieurs indirections | `delta[(state << 8) | symbol]` | une adresse de table dans le cas courant |
+| Lecture fichier | transformation avant le matching | blocs `byte[65536]` | supprimer les conversions du chemin chaud |
+| KMP | comparaison caractère par caractère | motif `byte[]` + traitement de bloc | réduire les appels de curseur |
+| `--print` | reconstruction textuelle de la ligne | conservation des octets de la ligne courante | restituer exactement le contenu lu |
+| Très grand DFA | table directe potentiellement coûteuse | repli par classes d’équivalence | borner la mémoire |
 
-- `mvn --offline --batch-mode --no-transfer-progress -Dstyle.color=never package` : **4 140 tests Java**, aucune erreur ; JAR produit.
-- `python3 -m unittest discover -s scripts/tests -v` : **24 tests Python**, aucune erreur.
-- Les tests génératifs comparent le nouveau chemin NFA direct, l’ancien contrat DFA et les curseurs à `Pattern.find` ou à un simulateur NFA indépendant.
-- Les sorties complètes avec numéros de lignes sont aussi comparées à l’oracle, au-delà du seul comptage.
-- Régressions sur 20 000 lettres concaténées, 20 000 groupes ou étoiles imbriqués, un alphabet de 1 536 caractères, les frontières de pages et les coupures CRLF/UTF-16.
+Le moteur garde la même sémantique de recherche par ligne : LF, CR et CRLF sont des séparateurs ; toute autre valeur est un symbole ordinaire. Le point `.` consomme exactement un octet.
 
-Lors de la première étape, avant Hopcroft, avec `-Xmx32m`, un fichier composé d’une ligne de **48 Mio** suivie de `ab`, puis d’une ligne sans correspondance, donne le résultat **1** avec KMP et AUTOMATON. La version précédente échoue avec `OutOfMemoryError` dans les deux stratégies. Cette limite concerne le tas Java, pas toute la mémoire du processus.
+## 2. Table directe `état × 256`
 
-## Mesures du code optimisé
+Pour les automates usuels, `NativeSearch` prépare un tableau plat d’entiers. Avec `q` états, sa taille est :
 
-La [campagne fixe](05-experiences.md) mesure désormais ces sources. Les [figures et statistiques publiées](assets/benchmark.md) remplacent les anciennes images ; leurs empreintes permettent d'identifier le code exécuté même avant un commit. Les anciens essais exploratoires avant/après et leurs dossiers datés ne sont plus publiés dans Git.
+\[
+4 \times 256 \times q\;\text{octets}.
+\]
 
-La nouvelle campagne sépare le temps des commandes complètes de la préparation et du parcours dans plusieurs JVM. Les chaînes regex et leurs tailles sont explicites ; les longues concaténations mesurent le coût de préparation. Les observations ne doivent pas être assimilées à une preuve des bornes de complexité décrites ci-dessus.
+Un DFA de 159 états demande ainsi environ 159 Kio ; un DFA de 1 026 états reste proche de 1 Mio. À cette échelle, privilégier une table contiguë est plus intéressant que multiplier les structures de pointeurs. La transition chaude devient :
 
-## Limites restantes
+```java
+state = delta[(state << 8) | (buffer[i] & 0xff)];
+```
 
-Un DFA peut toujours avoir une taille exponentielle. La construction à la demande, un budget d'états et un repli sur une simulation NFA restent des évolutions possibles. Hopcroft minimise le DFA obtenu ; il ne supprime pas le coût de la déterminisation préalable. Un affichage d'arbre très profond produit lui-même beaucoup de texte ; un accumulateur linéaire dans la sortie ne peut pas supprimer ce volume.
+Les états finaux sont encodés par un marqueur interne : dès qu’une occurrence est trouvée, le curseur cesse de faire travailler l’automate jusqu’à la fin de la ligne.
+
+Au-delà de 16 millions de cellules, soit 64 Mio pour la table, `NativeSearch` bascule sur une table compacte par classes. Ce cas protège la mémoire sans pénaliser les DFA ordinaires du protocole.
+
+## 3. Lecture binaire et traitement par blocs
+
+`FileLoader` utilise un tampon de 64 Kio et transmet au moteur des plages contiguës d’octets. Le curseur DFA et le curseur KMP possèdent tous deux une méthode de traitement de bloc ; l’appel virtuel n’est donc pas répété pour chaque symbole.
+
+Le mode `--count` ne conserve aucune ligne complète. Le mode `--print` alloue seulement la ligne en cours, car il doit pouvoir la restituer lorsqu’une correspondance est trouvée. Une occurrence peut traverser une frontière de tampon : l’état du DFA ou l’indice KMP est conservé entre deux blocs et n’est réinitialisé qu’à la frontière de ligne.
+
+## 4. KMP reste le fast path littéral
+
+Un motif littéral ASCII est converti une seule fois en `byte[]`, puis sa table LPS est construite en `O(m)`. Le scan du fichier est `O(n)` et n’effectue aucune conversion de symbole. Le chemin KMP reste utile comme témoin algorithmique et comme stratégie automatique pour une concaténation pure.
+
+## 5. Pourquoi DFAM n’est pas automatiquement plus rapide
+
+Hopcroft minimise le **nombre d’états**, pas le nombre d’octets à lire. Après préparation, DFA et DFAM exécutent tous deux une transition en temps constant pour chaque symbole tant qu’aucune occurrence n’a été trouvée. Réduire 159 états à 101 peut économiser de la mémoire sans changer sensiblement le temps du scan ; si un DFA passe de 1 026 à 1 025 états, le gain attendu pendant la lecture est presque nul alors que la minimisation a un coût de préparation mesurable.
+
+La campagne distingue donc explicitement :
+
+\[
+T_{\mathrm{DFA}},\quad T_{\mathrm{Hopcroft}},\quad T_{\mathrm{index}},\quad T_{\mathrm{scan}}.
+\]
+
+C’est une conclusion expérimentale importante : **minimal en états ne signifie pas minimal en temps d’exécution**.
+
+## 6. Protocole de comparaison
+
+Le comparateur normalise uniquement les séparateurs CRLF/CR vers LF, puis fournit la **même copie d’octets** à Java et à GNU grep. Le moteur de référence est lancé avec `grep -a -E` et `LC_ALL=C`. Le motif doit appartenir au sous-ensemble ASCII du projet ; aucune hypothèse textuelle supplémentaire n’est imposée au fichier.
+
+La validation précède toute mesure : les sorties `--print` et `grep -a -E -n` sont comparées octet par octet. Les tests couvrent notamment les 256 valeurs possibles, les frontières de tampon, NUL, CR/LF/CRLF et les occurrences coupées entre deux lectures.
+
+## 7. Limite restante face à GNU grep
+
+La réduction du coût par symbole rapproche le moteur d’une boucle DFA classique, mais GNU grep conserve des avantages d’implémentation et des stratégies spécialisées : coût de lancement natif faible, recherche littérale très optimisée et préfiltrage avant certains chemins généraux. Le projet reste volontairement centré sur les algorithmes étudiés — KMP, Thompson, déterminisation et Hopcroft — afin que les mesures restent interprétables.
 
 [← Perspectives](06-perspectives.md) · [Accueil](../README.md)

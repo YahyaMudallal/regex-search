@@ -86,14 +86,16 @@ class NativeSearchTest {
         assertTrue(search.search("", AutomatonBuilder.literal("")));
     }
 
-    /** Vérifie UTF-16 sans passer par le moteur regex Java, qui traite différemment les emoji. */
+    /** Vérifie les bornes de l'alphabet 8 bits et quelques symboles de ponctuation. */
     @Test
-    void handlesAllKindsOfLiteralCharacters() {
-        for (String pattern : List.of("😀", "\uD83D", "\uDE00", "\0", "\uFFFF", "東京", "é", ".*|()")) {
+    void handlesAllByteValuedLiteralCharacters() {
+        for (String pattern : List.of("\0", "\u00ff", "\u0080", ".*|()")) {
             Automaton dfa = AutomatonBuilder.literal(pattern);
-            assertTrue(search.search("préfixe" + pattern + "suffixe", dfa), pattern);
+            assertTrue(search.search("prefix" + pattern + "suffix", dfa), pattern);
             assertFalse(search.search("abc", dfa), pattern);
         }
+        Automaton outside = AutomatonBuilder.literal("\u0100");
+        assertThrows(IllegalArgumentException.class, () -> NativeSearch.prepare(outside));
     }
 
     /** Vérifie l'absence de mot accepté et les classes complémentaires définies manuellement. */
@@ -105,7 +107,7 @@ class NativeSearchTest {
         Automaton restricted = new AutomatonBuilder().state("s", Status.ENTER)
                 .state("f", Status.FINAL).anyExcept("s", "f", Set.of('a', '\n')).build();
         assertFalse(search.search("aaa\na", restricted));
-        assertTrue(search.search("aaaé", restricted));
+        assertTrue(NativeSearch.prepare(restricted).search(new byte[] {'a', 'a', 'a', (byte) 0xff}));
         assertTrue(search.search("aaa\0", restricted));
     }
 
@@ -134,7 +136,7 @@ class NativeSearchTest {
         assertThrows(NullPointerException.class, () -> search.search(null, literal));
         assertThrows(NullPointerException.class, () -> search.search("", null));
         assertThrows(NullPointerException.class, () -> NativeSearch.prepare(null));
-        assertThrows(NullPointerException.class, () -> NativeSearch.prepare(literal).search(null));
+        assertThrows(NullPointerException.class, () -> NativeSearch.prepare(literal).search((String) null));
         assertThrows(IllegalArgumentException.class, () -> NativeSearch.prepare(new Automaton()));
         Automaton multipleInitials = new AutomatonBuilder().state("s", Status.ENTER)
                 .state("f", Status.ENTER_FINAL).build();
@@ -180,4 +182,19 @@ class NativeSearchTest {
         assertTrue(prepared.search(repeated + "b"));
         assertFalse(prepared.search(repeated + "c"));
     }
+    /** Le chemin par blocs doit être strictement équivalent au parcours symbole par symbole. */
+    @Test
+    void byteBulkCursorMatchesScalarCursor() throws Exception {
+        NativeSearch.Prepared prepared = NativeSearch.prepareNfa(
+                NFA.buildNFA(RegexParser.parse("(Elizabeth|Darcy).*(said|replied)")));
+        byte[] text = "xx Elizabeth eventually said yy".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        SearchCursor bulk = prepared.newCursor();
+        SearchCursor scalar = prepared.newCursor();
+        assertTrue(bulk.accept(text, 0, text.length));
+        for (byte value : text) {
+            scalar.accept(value & 0xff);
+        }
+        assertEquals(scalar.matches(), bulk.matches());
+    }
+
 }

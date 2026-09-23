@@ -1,6 +1,6 @@
 package com.sorbonne.benchmark;
 
-import java.io.BufferedReader;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -9,7 +9,7 @@ import java.util.Optional;
 
 import com.sorbonne.automata.Automaton;
 import com.sorbonne.regex.DFA;
-import com.sorbonne.regex.DFAMHopcroft;
+import com.sorbonne.regex.DFAM;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
@@ -19,14 +19,14 @@ import com.sorbonne.search.PreparedSearch;
 import com.sorbonne.utils.FileLoader;
 
 /**
- * Mesure une recherche ligne par ligne dans un seul fichier texte UTF-8.
+ * Mesure une recherche ligne par ligne dans un fichier vu comme suite d'octets.
  *
  * <p>
  * Le motif est une expression régulière du langage de {@link RegexParser},
  * pas un filtre de noms de fichiers. En mode automatique, une concaténation
  * de lettres utilise KMP ; les autres expressions passent directement du NFA
  * au DFA de recherche. La stratégie DFA indexe directement ce graphe ; DFAM
- * applique {@link DFAMHopcroft#minimize(Automaton)} avant la même indexation.
+ * applique {@link DFAM#minimize(Automaton)} avant la même indexation.
  * AUTOMATON conserve le comportement historique avec minimisation.
  * </p>
  *
@@ -77,7 +77,7 @@ public final class Benchmark {
          * @param line       contenu sans séparateur de ligne
          * @throws Exception si l'écriture ou le traitement échoue
          */
-        void accept(long lineNumber, String line) throws Exception;
+        void accept(long lineNumber, byte[] line, int length) throws IOException;
     }
 
     /** Fichier à lire ; son existence sera vérifiée à l'ouverture. */
@@ -90,7 +90,7 @@ public final class Benchmark {
     /**
      * Configure une mesure avec sélection automatique du moteur.
      * 
-     * @param file    fichier texte UTF-8, non nul
+     * @param file    fichier a parcourir, non nul
      * @param pattern expression régulière non nulle, validée à l'exécution
      */
     public Benchmark(Path file, String pattern) {
@@ -100,7 +100,7 @@ public final class Benchmark {
     /**
      * Configure une mesure sans ouvrir le fichier ni préparer le motif.
      * 
-     * @param file     fichier texte UTF-8, non nul
+     * @param file     fichier a parcourir, non nul
      * @param pattern  expression régulière non nulle
      * @param strategy stratégie demandée, non nulle
      * @throws NullPointerException si un argument est nul
@@ -123,7 +123,7 @@ public final class Benchmark {
      *                               automate
      * @param preparationNanos       préparation entière, incluant le choix du
      *                               moteur
-     * @param scanNanos              ouverture, lecture, décodage, recherche,
+     * @param scanNanos              ouverture, lecture, recherche,
      *                               comptage et fermeture
      * @param totalNanos             durée globale, hors création du résultat et
      *                               affichage
@@ -156,7 +156,7 @@ public final class Benchmark {
      * Prépare le motif, lit le fichier et compte les lignes correspondantes.
      *
      * <p>
-     * Pour C unités UTF-16 réparties sur L lignes, le parcours prend
+     * Pour C octets repartis sur L lignes, le parcours prend
      * O(C + L) avec les deux moteurs. Le comptage travaille par blocs en
      * O(B) mémoire supplémentaire, indépendamment de la longueur des lignes.
      * Le parseur et la préparation KMP sont O(m). La déterminisation peut
@@ -195,16 +195,7 @@ public final class Benchmark {
     public void forEachMatchingLine(LineConsumer consumer) throws Exception {
         Objects.requireNonNull(consumer, "Le consommateur ne doit pas être nul");
         PreparedSearch search = prepare().search();
-        try (BufferedReader reader = FileLoader.open(file)) {
-            long lineNumber = 0;
-            String line;
-            while ((line = reader.readLine()) != null) {
-                lineNumber++;
-                if (search.search(line)) {
-                    consumer.accept(lineNumber, line);
-                }
-            }
-        }
+        FileLoader.forEachMatchingLine(file, search.newCursor(), consumer::accept);
     }
 
     private record Preparation(PreparedSearch search, Strategy strategy, long parsingNanos,
@@ -247,7 +238,7 @@ public final class Benchmark {
             phaseStart = System.nanoTime();
             Automaton minimized = dfa;
             if (selected != Strategy.DFA) {
-                minimized = DFAMHopcroft.minimize(dfa);
+                minimized = DFAM.minimize(dfa);
                 minimizationNanos = System.nanoTime() - phaseStart;
             }
             phaseStart = System.nanoTime();
@@ -263,7 +254,7 @@ public final class Benchmark {
      * Ainsi {@code a\.b} est littéral, mais {@code a.b} contient un point
      * universel.
      * Le parcours itératif coûte O(n) en temps et au plus O(n) en mémoire
-     * pour n nœuds, dont les feuilles portent chacune une unité UTF-16.
+     * pour n noeuds, dont les feuilles portent chacune un symbole ASCII.
      * 
      * @param tree arbre produit par le parseur
      * @return mot littéral, ou absence si un opérateur exige les automates

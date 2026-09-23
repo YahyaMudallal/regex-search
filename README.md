@@ -14,7 +14,7 @@
 
 Une commande comme `grep -E 'Elizabeth|Darcy' roman.txt` tient sur une ligne. Derrière cette ligne, il faut pourtant répondre à plusieurs questions : comment représenter le motif ? Comment reconnaître une occurrence au milieu du texte ? Que faut-il préparer une seule fois, et que faut-il recommencer à chaque ligne ? À quel moment le coût de préparation devient-il plus important que la recherche elle-même ?
 
-Ce projet reprend ces questions en construisant un moteur de recherche textuelle en Java. Le point de départ est une expression régulière et un fichier UTF-8. Le résultat recherché est l’ensemble des lignes contenant une occurrence du motif. Le projet propose un mode de recherche qui affiche ces lignes avec leur numéro, ainsi qu’un mode benchmark qui les compte sans les afficher.
+Ce projet reprend ces questions en construisant un moteur de recherche textuelle en Java. Le point de départ est une expression régulière ASCII et un fichier parcouru comme une suite brute d’octets. Le résultat recherché est l’ensemble des lignes contenant une occurrence du motif. Le projet propose un mode de recherche qui affiche ces lignes avec leur numéro, ainsi qu’un mode benchmark qui les compte sans les afficher.
 
 Deux chemins sont disponibles. Un motif littéral, comme `Elizabeth`, est recherché par **Knuth–Morris–Pratt**. Un motif qui utilise une alternative, une étoile ou un point universel passe par un **arbre syntaxique**, un **automate non déterministe avec transitions ε**, puis un **automate déterministe**. La préparation transforme ensuite cet automate de reconnaissance en un moteur capable de trouver une occurrence à n’importe quelle position d’une ligne.
 
@@ -49,7 +49,7 @@ Le README permet de démarrer sans lire tout le rapport. Les chapitres servent e
 | **Bash**         | Point d’entrée des scripts ; utilisable sous Linux, macOS ou un environnement Linux tel que WSL |
 | **Python**       | **3.9 ou supérieur**, bibliothèque standard pour les comparaisons et leurs tests                |
 | **GNU grep**     | Nécessaire uniquement pour la comparaison ; `ggrep` est recherché en priorité sur macOS         |
-| **Locale UTF-8** | Nécessaire pour donner le même sens aux caractères dans la comparaison                          |
+| **Locale `C`** | Imposée par le protocole pour comparer le même alphabet d’octets avec GNU grep                 |
 
 JUnit **6.1.3** est une dépendance de test téléchargée par Maven. Le moteur Java n’appelle ni `grep` ni `java.util.regex` pour effectuer ses recherches. Matplotlib sert uniquement à régénérer les figures du rapport ; il n’est requis ni pour lancer le moteur ni pour exécuter les tests ordinaires.
 
@@ -110,13 +110,13 @@ flowchart LR
     M --> S["Indexation des transitions"]
     K --> L["Recherche sur chaque ligne"]
     S --> L
-    F["Fichier UTF-8 · lecture bufferisée"] --> L
+    F["Fichier · scan direct des octets par blocs"] --> L
     L --> O["Lignes affichées ou compteurs + durées"]
     style M fill:#fff3d6,stroke:#ba7b13,color:#5b3c0a
     style L fill:#e3f4ef,stroke:#16866b,color:#124a3b
 ```
 
-La préparation du motif se fait **avant** la boucle de lecture. Le parseur et le constructeur NFA sont linéaires et itératifs. Le comptage traite des blocs de 64 K caractères avec un curseur réinitialisé entre les lignes : même une très longue ligne ne doit pas tenir en mémoire. Le mode d’affichage conserve une ligne entière pour pouvoir la restituer. Les motifs acceptant le mot vide correspondent à toutes les lignes et évitent la construction des automates.
+La préparation du motif se fait **avant** la boucle de lecture. Le parseur et le constructeur NFA sont linéaires et itératifs. Le comptage traite des blocs de 64 Kio avec un curseur réinitialisé entre les lignes : même une très longue ligne ne doit pas tenir en mémoire. Le mode d’affichage conserve une ligne entière pour pouvoir la restituer. Les motifs acceptant le mot vide correspondent à toutes les lignes et évitent la construction des automates.
 
 Le choix de KMP repose sur l’arbre syntaxique. Par exemple, `a.b` contient un point universel et utilise les automates, tandis que `a\.b` représente trois caractères littéraux et peut utiliser KMP. Tester simplement si la chaîne contient un point conduirait à un mauvais choix.
 
@@ -124,7 +124,7 @@ Le choix de KMP repose sur l’arbre syntaxique. Par exemple, `a.b` contient un 
 
 ## 03 · Protocole expérimental reproductible
 
-Le profil versionné [`report-v4-dfa-dfam-kmp-grep`](scripts/report-profile.json) compare **DFA sans minimisation, DFAM avec Hopcroft, KMP et GNU grep -E (egrep)**. Il fixe **32 cas Java**, dont 30 comparés en ligne de commande : mêmes regex, corpus, options Java 21 et répétitions. KMP participe seulement sur les littéraux `Elizabeth` et `ababababac` ; il n'est pas applicable aux opérateurs regex. `AUTOMATON` reste un alias du chemin avec minimisation pour les anciens appels.
+Le profil versionné [`report-v5-byte-alphabet`](scripts/report-profile.json) compare **DFA sans minimisation, DFAM avec Hopcroft, KMP et GNU grep -E (egrep)**. Il fixe **32 cas Java**, dont 30 comparés en ligne de commande : mêmes regex, corpus, options Java 21 et répétitions. KMP participe seulement sur les littéraux `Elizabeth` et `ababababac` ; il n'est pas applicable aux opérateurs regex. `AUTOMATON` reste un alias du chemin avec minimisation pour les anciens appels.
 
 Chaque cas CLI utilise **30 processus par moteur**, avec ordre équilibré. Les étapes Java sont aussi mesurées dans **5 JVM indépendantes**, chacune avec 10 prépassages puis 10 mesures. Le [rapport des résultats](docs/assets/benchmark.md) présente les quatre moteurs côte à côte, les coûts préparation/parcours et la taille des automates avant/après Hopcroft. La série grep affichée vient du cas DFA associé ; les répétitions grep des autres cas restent dans les CSV.
 
@@ -182,7 +182,7 @@ regex-search/
     │   ├── regex/                    # parseur, arbres, NFA, DFA et DFAM
     │   ├── search/                   # KMP et recherche par automate
     │   ├── benchmark/                # préparation, parcours et chronométrage
-    │   ├── utils/                    # ouverture UTF-8 bufferisée
+    │   ├── utils/                    # scan direct byte[] sur alphabet 0..255
     │   └── specifications/           # sujet et chapitre de référence
     └── test/java/com/sorbonne/       # exemples, propriétés et générateurs
 ```

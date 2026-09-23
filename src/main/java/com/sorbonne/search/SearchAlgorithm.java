@@ -8,10 +8,10 @@ package com.sorbonne.search;
  * {@link NativeSearch}, c'est un automate déterministe représentant un langage.
  * Le paramètre générique empêche de confondre ces deux représentations.</p>
  *
- * <p>Les comparaisons portent sur les unités UTF-16 de {@link String}, sans
- * normalisation des accents. Un langage qui accepte le mot vide correspond à
- * tout texte, même vide. Les arguments nuls sont refusés. La signification
- * exacte du motif et le coût de préparation sont précisés par l'implémentation.</p>
+ * <p>Le moteur de production travaille sur un alphabet de 256 valeurs. Les méthodes
+ * prenant une {@link String} sont des commodités pour les tests et démonstrations ;
+ * le scan des fichiers consomme directement les octets. Un langage qui accepte le
+ * mot vide correspond à tout texte, même vide.</p>
  *
  * @param <P> représentation du motif : String littérale ou Automaton, par exemple
  */

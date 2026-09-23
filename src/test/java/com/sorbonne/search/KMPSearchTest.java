@@ -125,10 +125,8 @@ class KMPSearchTest {
                 Arguments.of("l'étoile n'est pas un opérateur", "aaaa", "a*", false),
                 Arguments.of("espaces, tabulation et saut de ligne", "a\t b\nc", "\t b\n", true),
                 Arguments.of("caractère nul dans une chaîne", "ab\0cd", "\0c", true),
-                Arguments.of("accents et écriture non latine", "été 東京 hiver", "東京", true),
-                Arguments.of("emoji représenté par deux unités UTF-16", "a😀b", "😀", true),
-                Arguments.of("comparaison des unités UTF-16", "a😀b", "\uD83D", true),
-                Arguments.of("pas de normalisation des accents", "café", "cafe\u0301", false));
+                Arguments.of("octet de controle DEL", "ab\u007fcd", "\u007fc", true),
+                Arguments.of("ponctuation ASCII", "a[]{}b", "[]{}", true));
     }
 
     /** Vérifie que les appels successifs, y compris après une erreur, restent indépendants. */
@@ -150,10 +148,10 @@ class KMPSearchTest {
     @Test
     void reusesPreparedPatternsOnGeneratedTexts() {
         Random random = new Random(20_260_922L);
-        for (String pattern : new String[] {"", "a", "ababac", "aaaaab", "é.", "😀"}) {
+        for (String pattern : new String[] {"", "a", "ababac", "aaaaab", ".*", "[]"}) {
             KMPSearch.Prepared prepared = KMPSearch.prepare(pattern);
             for (int i = 0; i < 100; i++) {
-                String text = SearchGenerators.text(random, 120, "aaaabbcé.");
+                String text = SearchGenerators.text(random, 120, "aaaabbc.*[]");
                 assertEquals(text.contains(pattern), prepared.search(text));
                 assertTrue(prepared.search(text + pattern));
                 assertEquals(pattern.isEmpty(), prepared.search(""));
@@ -166,8 +164,9 @@ class KMPSearchTest {
     @SuppressWarnings({"ThrowableResultIgnored", "ThrowableResultOfMethodCallIgnored"})
     void preparedSearchRejectsNull() {
         assertThrows(NullPointerException.class, () -> KMPSearch.prepare(null));
+        assertThrows(IllegalArgumentException.class, () -> KMPSearch.prepare("\u0080"));
         KMPSearch.Prepared prepared = KMPSearch.prepare("ab");
-        assertThrows(NullPointerException.class, () -> prepared.search(null));
+        assertThrows(NullPointerException.class, () -> prepared.search((String) null));
         assertTrue(prepared.search("xxab"));
         assertFalse(prepared.search("a"));
         assertFalse(prepared.search("b"));

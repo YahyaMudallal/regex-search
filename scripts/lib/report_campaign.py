@@ -1,4 +1,4 @@
-"""Empreintes et corpus répétés, partagés par la campagne fixe."""
+"""Empreintes et corpus repetes, partages par la campagne fixe."""
 
 import hashlib
 import shutil
@@ -15,17 +15,17 @@ def sha256_file(path):
 
 
 def prepare_scaled_corpora(source, directory, factors=(8, 32)):
-    """Normalise sur disque puis répète par blocs, en mémoire O(taille du bloc)."""
+    """Repete un corpus binaire par blocs, avec une fin de ligne finale stable."""
     lines = 0
-    last = ""
+    last = None
     corpora = {1: source}
     with tempfile.TemporaryFile() as normalized:
-        with source.open(encoding="utf-8", newline=None) as reader:
+        with source.open("rb") as reader:
             while chunk := reader.read(64 * 1024):
-                normalized.write(chunk.encode("utf-8"))
-                lines += chunk.count("\n")
+                normalized.write(chunk)
+                lines += chunk.count(b"\n")
                 last = chunk[-1]
-        if last and last != "\n":
+        if last is not None and last != 0x0A:
             normalized.write(b"\n")
             lines += 1
         for factor in factors:

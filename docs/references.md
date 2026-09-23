@@ -24,7 +24,7 @@ Les sections 10.2–10.4 présentent les automates et la construction des sous-e
 Ces ressources donnent une référence indépendante sur KMP. Leur code est une variante de présentation ; la table LPS du projet et ses coûts sont expliqués à partir de l’implémentation locale, pas présentés comme une copie de cette variante.
 
 **GNU Project — manuel GNU grep.**  
-[Usage et relation entre egrep et grep -E](https://www.gnu.org/s/grep/manual/html_node/Usage.html) · [Performance](https://www.gnu.org/s/grep/manual/html_node/Performance.html) · [Encodage des caractères](https://www.gnu.org/software/grep/manual/html_node/Character-Encoding.html).
+[Usage et relation entre egrep et grep -E](https://www.gnu.org/s/grep/manual/html_node/Usage.html) · [Performance](https://www.gnu.org/s/grep/manual/html_node/Performance.html).
 
 Ces pages motivent l’usage de `grep -E`, le contrôle de la locale et la prudence sur les algorithmes internes utilisés selon le motif. La version réellement exécutée pendant les expériences est enregistrée dans les métadonnées.
 
@@ -51,7 +51,7 @@ Les autres textes du répertoire `Samples/` constituent des instances disponible
 | Versions de compilation et de test | [pom.xml](../pom.xml) |
 | Construction NFA | [NFA.java](../src/main/java/com/sorbonne/regex/NFA.java) |
 | Sous-ensembles et classes de caractères | [DFA.java](../src/main/java/com/sorbonne/regex/DFA.java) |
-| Minimisation de Hopcroft | [DFAMHopcroft.java](../src/main/java/com/sorbonne/regex/DFAMHopcroft.java) |
+| Minimisation de Hopcroft | [DFAM.java](../src/main/java/com/sorbonne/regex/DFAM.java) / [DFAMHopcroft.java](../src/main/java/com/sorbonne/regex/DFAMHopcroft.java) |
 | Recherche de facteur par automate | [NativeSearch.java](../src/main/java/com/sorbonne/search/NativeSearch.java) |
 | Préparation et parcours KMP | [KMPSearch.java](../src/main/java/com/sorbonne/search/KMPSearch.java) |
 | Frontières du chronométrage Java | [Benchmark.java](../src/main/java/com/sorbonne/benchmark/Benchmark.java) |

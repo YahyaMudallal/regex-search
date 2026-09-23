@@ -50,11 +50,11 @@ class BenchmarkPropertyTest {
         List<String> lines = new ArrayList<>();
         int count = random.nextInt(16);
         for (int i = 0; i < count; i++) {
-            lines.add(SearchGenerators.text(random, 50, "aabé xyz."));
+            lines.add(SearchGenerators.text(random, 50, "aabc xyz."));
         }
         // Chaque ligne reçoit un LF, y compris une dernière ligne vide.
         String content = lines.isEmpty() ? "" : String.join("\n", lines) + "\n";
-        Path file = Files.writeString(directory.resolve(seed + ".txt"), content, StandardCharsets.UTF_8);
+        Path file = Files.writeString(directory.resolve(seed + ".txt"), content, StandardCharsets.US_ASCII);
         Pattern oracle = Pattern.compile(expression, Pattern.DOTALL);
         long expected = lines.stream().filter(line -> oracle.matcher(line).find()).count();
         for (Benchmark.Strategy strategy : List.of(Benchmark.Strategy.AUTO, Benchmark.Strategy.DFA, Benchmark.Strategy.DFAM, Benchmark.Strategy.AUTOMATON)) {
@@ -69,7 +69,8 @@ class BenchmarkPropertyTest {
             }
             List<String> actualLines = new ArrayList<>();
             new Benchmark(file, expression, strategy).forEachMatchingLine(
-                    (number, line) -> actualLines.add(number + ":" + line));
+                    (number, line, length) -> actualLines.add(number + ":"
+                            + new String(line, 0, length, StandardCharsets.US_ASCII)));
             assertEquals(expectedLines, actualLines, expression + " / lignes / " + strategy);
         }
     }

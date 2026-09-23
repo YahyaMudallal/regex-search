@@ -25,10 +25,9 @@ Pour la comparaison, vérifier **GNU grep**, pas seulement la présence d’une 
 grep --version
 # Sur un système où GNU grep est installé sous ce nom :
 ggrep --version
-locale -a
 ```
 
-Le script essaie `ggrep`, puis `grep`, et vérifie sa version. `--grep /chemin/vers/grep` permet de sélectionner un autre exécutable. Une locale UTF-8 doit être installée ; le script cherche notamment `C.UTF-8` et `en_US.UTF-8`.
+Le script essaie `ggrep`, puis `grep`, et vérifie sa version. `--grep /chemin/vers/grep` permet de sélectionner un autre exécutable. Le protocole fixe `LC_ALL=C` : aucun paquet de locale supplémentaire n'est requis et GNU grep traite le corpus avec la même sémantique à un octet que le moteur Java.
 
 ## 2. Nettoyer et tester
 
@@ -146,7 +145,7 @@ Le dossier de sortie doit être nouveau. La commande crée une copie temporaire 
 
 Les mesures brutes sont en nanosecondes ; les résumés sont en millisecondes. L’écart type décrit la dispersion des observations, pas un intervalle de confiance sur la moyenne.
 
-Les expressions utilisent le sous-ensemble commun décrit au [chapitre 2](02-conception.md). Le comparateur refuse notamment `+`, les classes de caractères et les ancres : ces opérateurs ne sont pas implémentés dans le moteur du projet. Le fichier doit être du texte UTF-8 valide, sans NUL ni caractères hors BMP. Les raisons de ces restrictions sont détaillées dans le [protocole expérimental](05-experiences.md).
+Les expressions utilisent le sous-ensemble commun décrit au [chapitre 2](02-conception.md). Le comparateur refuse notamment `+`, les classes de caractères et les ancres : ces opérateurs ne sont pas implémentés dans le moteur du projet. Le motif doit rester ASCII. Le corpus est, lui, une suite d'octets : les valeurs `0..255`, y compris NUL et les octets de poids fort, sont des données ordinaires. Le point `.` consomme exactement un octet. Cette convention est détaillée dans le [protocole expérimental](05-experiences.md).
 
 ## 5. Reproduire toute la campagne du rapport
 
@@ -164,7 +163,7 @@ Les expressions utilisent le sous-ensemble commun décrit au [chapitre 2](02-con
 MAVEN_OFFLINE=1 ./scripts/report-campaign.sh
 ```
 
-Les paramètres de mesure sont figés dans [`scripts/report-profile.json`](../scripts/report-profile.json). La campagne de référence exige **Java 21**, **Python 3.12 ou supérieur**, GNU grep et une locale UTF-8. L'environnement de tracé est mis en cache dans `.cache/report-venv/`, donc il ne pollue ni l'archive de rendu ni les fichiers suivis par Git.
+Les paramètres de mesure sont figés dans [`scripts/report-profile.json`](../scripts/report-profile.json). La campagne de référence exige **Java 21**, **Python 3.12 ou supérieur** et GNU grep ; elle impose elle-même la locale POSIX `C`. L'environnement de tracé est mis en cache dans `.cache/report-venv/`, donc il ne pollue ni l'archive de rendu ni les fichiers suivis par Git.
 
 Le protocole suit sept phases ordonnées :
 
@@ -221,7 +220,7 @@ Le packaging exige un arbre Git propre, prend uniquement les fichiers suivis par
 | Le motif semble interprété par le terminal | Entourer la regex de guillemets simples                                                 |
 | KMP refuse `a.b`                           | Le point est un opérateur ; utiliser `AUTO`, ou `a\.b` pour un point littéral           |
 | Le dossier de résultats existe déjà        | Choisir un autre `--output-dir` pour préserver l’expérience précédente                  |
-| Le fichier UTF-8 est rejeté                | Vérifier son encodage ; le lecteur ne remplace pas silencieusement les octets invalides |
+| Une regex non ASCII est rejetée            | Le langage du projet est volontairement limité aux motifs ASCII ; le fichier, lui, est lu octet par octet |
 | Les temps varient entre deux appels        | Consulter toutes les répétitions ; ne pas comparer une seule observation                |
 
 [← Accueil](../README.md) · [Chapitre suivant : conception →](02-conception.md)

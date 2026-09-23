@@ -10,7 +10,7 @@ import com.sorbonne.automata.Status;
 import com.sorbonne.automata.Transition;
 import com.sorbonne.benchmark.Benchmark;
 import com.sorbonne.regex.DFA;
-import com.sorbonne.regex.DFAMHopcroft;
+import com.sorbonne.regex.DFAM;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
@@ -142,7 +142,11 @@ public class Main {
             }
             Benchmark benchmark = new Benchmark(Path.of(args[offset]), args[offset + 1], strategy);
             if (printLines) {
-                benchmark.forEachMatchingLine((lineNumber, line) -> out.println(lineNumber + ":" + line));
+                benchmark.forEachMatchingLine((lineNumber, line, length) -> {
+                    out.print(lineNumber + ":");
+                    out.write(line, 0, length);
+                    out.write('\n');
+                });
                 return 0;
             }
             Benchmark.Result result = benchmark.pipeline();
@@ -203,7 +207,7 @@ public class Main {
         SyntaxTree tree = RegexParser.parse(expression);
         Automaton nfa = NFA.buildNFA(tree);
         Automaton dfa = DFA.convert(nfa);
-        Automaton minimized = DFAMHopcroft.minimize(dfa);
+        Automaton minimized = DFAM.minimize(dfa);
         System.out.println("Expression : " + expression);
         System.out.println("Arbre : " + tree);
         System.out.println("NFA :\n" + nfa);
@@ -419,12 +423,12 @@ public class Main {
         printSearchResult(search, "abc", "a.c");
         printSearchResult(search, "a.c", "a.c");
 
-        System.out.println("\nChaînes vides, casse et Unicode :");
+        System.out.println("\nChaines vides et casse :");
         printSearchResult(search, "bonjour", "");
         printSearchResult(search, "", "");
         printSearchResult(search, "", "a");
         printSearchResult(search, "Bonjour", "bonjour");
-        printSearchResult(search, "été 😀 hiver", "😀");
+        printSearchResult(search, "ASCII ponctuation []{}", "[]{}");
     }
 
     // ====================================================================
