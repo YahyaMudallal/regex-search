@@ -2,7 +2,7 @@
 
 # Sources, bibliographie et traçabilité
 
-Les explications algorithmiques s’appuient d’abord sur le sujet et sur le chapitre fourni dans le dépôt. Les affirmations propres à l’implémentation sont reliées aux classes Java. Les chiffres du rapport proviennent de la campagne archivée, et non d’un résultat publié pour un autre moteur.
+Les explications algorithmiques s’appuient d’abord sur le sujet et sur le chapitre fourni dans le dépôt. Les affirmations propres à l’implémentation sont reliées aux classes Java. Les chiffres du rapport proviennent de la référence expérimentale publiée et versionnée, et non d’un résultat produit pour un autre moteur.
 
 ## 1. Documents fournis avec le projet
 
@@ -42,7 +42,7 @@ Bibliothèque utilisée pour produire les SVG et PNG à partir des CSV. La dépe
 
 Le corpus mesuré est la copie locale de **Jane Austen, _Pride and Prejudice_**, dont l’en-tête indique Project Gutenberg, eBook n° 1342. Cette identification est lue dans le fichier présent dans `Samples/`. Les conditions et notices du fichier sont conservées ; le benchmark ne les retire pas.
 
-Les autres textes du répertoire `Samples/` constituent des instances disponibles pour de futures campagnes. Ils ne doivent pas être présentés comme mesurés dans les figures publiées : celles-ci utilisent un seul livre et ses répétitions.
+Les autres textes du répertoire `Samples/` constituent des instances disponibles pour de futures campagnes. Ils ne doivent pas être présentés comme mesurés dans les figures publiées : celles-ci utilisent un livre, ses répétitions et un corpus synthétique déterministe.
 
 ## 4. Retrouver les preuves locales
 
@@ -56,8 +56,8 @@ Les autres textes du répertoire `Samples/` constituent des instances disponible
 | Préparation et parcours KMP | [KMPSearch.java](../src/main/java/com/sorbonne/search/KMPSearch.java) |
 | Frontières du chronométrage Java | [Benchmark.java](../src/main/java/com/sorbonne/benchmark/Benchmark.java) |
 | Frontières du chronométrage externe | [compare_egrep.py](../scripts/lib/compare_egrep.py) |
-| Sources et environnement mesurés | [campaign.json](results/2026-09-22/campaign.json) |
-| État des tests | [validation.json](results/2026-09-22/validation.json) |
+| Sources et environnement mesurés | [benchmark.json](assets/benchmark.json) |
+| État des tests | [Protocole de validation](04-validation.md), journal local `target/report/results/validation.txt` |
 | Calcul et présentation des figures | [plot-report.py](../scripts/plot-report.py) |
 
-Les pages web complètent les sources locales ; elles ne servent pas de preuve aux durées mesurées. Toute nouvelle campagne doit conserver ses propres paramètres et observations.
+Les pages web complètent les sources locales ; elles ne servent pas de preuve aux durées mesurées. Chaque campagne locale conserve ses paramètres et observations jusqu’au prochain nettoyage ; seul le résumé de référence et les figures sont versionnés.

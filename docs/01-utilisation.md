@@ -6,7 +6,7 @@ Le chemin le plus court consiste à vérifier les outils, lancer les tests, puis
 
 ## 1. Environnement de travail
 
-Le projet est compilé pour Java 25. Il faut un **JDK complet** : une installation qui fournit seulement l’exécution de Java ne suffit pas, puisque Maven appelle aussi le compilateur. Les scripts utilisent le JDK désigné par `JAVA_HOME`. Si cette variable n’est pas définie, ils récupèrent le répertoire du `java` présent dans le `PATH`.
+Le projet est compilé pour Java 21. Il faut un **JDK complet** : une installation qui fournit seulement l’exécution de Java ne suffit pas, puisque Maven appelle aussi le compilateur. Les scripts utilisent le JDK désigné par `JAVA_HOME`. Si cette variable n’est pas définie, ils récupèrent le répertoire du `java` présent dans le `PATH`.
 
 ```bash
 java -version
@@ -15,7 +15,7 @@ mvn --version
 python3 --version
 ```
 
-Les versions minimales attendues sont Java 25, Maven 3.6.3 et Python 3.9. Le POM déclare JUnit 6.1.3, Maven Compiler Plugin 3.14.0, Surefire 3.5.3 et Maven JAR Plugin 3.4.2. Ces versions sont celles du dépôt ; elles ne constituent pas une recommandation générale d’utiliser la version la plus récente de chaque outil.
+Les versions minimales attendues sont Java 21, Maven 3.6.3 et Python 3.9. Le POM déclare JUnit 6.1.3, Maven Compiler Plugin 3.14.0, Surefire 3.5.3 et Maven JAR Plugin 3.4.2. Ces versions sont celles du dépôt ; elles ne constituent pas une recommandation générale d’utiliser la version la plus récente de chaque outil.
 
 Bash orchestre les commandes. Python ne participe pas à la recherche du motif : sa bibliothèque standard sert à chronométrer les processus, vérifier leurs sorties et calculer les statistiques. Sous Windows, un environnement Linux tel que WSL permet d’utiliser les scripts Bash ; la campagne publiée a été exécutée sous macOS arm64.
 
@@ -148,22 +148,63 @@ Les expressions utilisent le sous-ensemble commun décrit au [chapitre 2](02-con
 ## 5. Reproduire toute la campagne du rapport
 
 ```bash
-./run.sh
-./scripts/report-campaign.sh target/rapport-reproduction --runs 20
+# Campagne de référence : l'arbre Git doit être propre.
+./scripts/report-campaign.sh
+
+# Même campagne puis suppression des CSV/TXT générés localement.
+./scripts/report-campaign.sh --purge
+
+# Essai de développement : résultats locaux uniquement, aucun remplacement de docs/assets/.
+./scripts/report-campaign.sh --allow-dirty
+
+# Avec le cache Maven déjà rempli :
+MAVEN_OFFLINE=1 ./scripts/report-campaign.sh
 ```
 
-La campagne exécute dix expériences en série. Elle recrée deux corpus dérivés, en répétant le livre huit et trente-deux fois, dans `target/report-corpora/`. Les empreintes des sources et la configuration sont conservées dans `campaign.json`. Les répétitions modifient le volume, pas la diversité linguistique du texte.
+Les paramètres de mesure sont figés dans [`scripts/report-profile.json`](../scripts/report-profile.json). La campagne de référence exige **Java 21**, **Python 3.12 ou supérieur**, GNU grep et une locale UTF-8. L'environnement de tracé est mis en cache dans `.cache/report-venv/`, donc il ne pollue ni l'archive de rendu ni les fichiers suivis par Git.
 
-Pour régénérer les figures, utiliser **Python 3.11 ou supérieur** avec Matplotlib 3.11.2, une dépendance de visualisation distincte :
+Le protocole suit sept phases ordonnées :
+
+1. vérifier Git et les prérequis, nettoyer les sorties locales, compiler et lancer les tests ;
+2. reconstruire les corpus dérivés puis vérifier leur empreinte ;
+3. comparer **octet par octet** les sorties numérotées Java et `grep -E -n` ;
+4. compter hors chronométrage les états/transitions du NFA et du DFA de recherche ;
+5. mesurer les commandes complètes avec ordre équilibré ;
+6. mesurer les phases dans plusieurs JVM indépendantes puis recalculer les résumés ;
+7. tracer, vérifier les empreintes, publier `docs/assets/` atomiquement et supprimer les fichiers temporaires.
+
+| Sortie locale, ignorée par Git | Contenu |
+| :--- | :--- |
+| `target/report/results/report.md` | Regex développées, statistiques, structure des automates et limites |
+| `target/report/results/campaign.json` | Paramètres, Git HEAD/dirty, versions, commandes, empreintes et contrôles |
+| `target/report/results/automata.csv` | Longueur de regex, états/arcs NFA et DFA de recherche |
+| `target/report/results/cli.csv`, `jvm.csv` | Toutes les observations, y compris les prépassages |
+| `target/report/results/*-summary.csv` | Statistiques recalculables depuis les observations |
+| `target/report/results/validation.txt` | Sortie des tests Java/Python |
+| `docs/assets/` | Six SVG, `benchmark.md` et `benchmark.json` utilisés directement par les Markdown |
+
+La publication est transactionnelle : les assets existants ne sont remplacés qu'après validation complète. Un échec conserve donc la référence précédente. `--allow-dirty` autorise un essai exploratoire mais interdit la publication dans `docs/assets/`. `--purge` supprime les CSV et TXT **après** la publication ; `benchmark.md`, `benchmark.json`, les SVG et le rapport local restent disponibles.
+
+Pour retracer manuellement une campagne locale non purgée :
 
 ```bash
-python3 -m venv /tmp/regex-report-venv
-/tmp/regex-report-venv/bin/python -m pip install -r scripts/requirements-report.txt
-MPLCONFIGDIR=/tmp/regex-report-mpl /tmp/regex-report-venv/bin/python \
-  scripts/plot-report.py target/rapport-reproduction --output target/rapport-figures
+.cache/report-venv/bin/python scripts/plot-report.py
+./scripts/freeze-report.sh   # alias historique : republie la dernière campagne validée
 ```
 
-Cette installation est optionnelle. Elle ne modifie ni le POM ni les dépendances du moteur. Les SVG publiés dans `docs/assets/` se lisent directement dans le dépôt.
+Pour nettoyer toutes les sorties locales sans toucher aux assets publiés :
+
+```bash
+./scripts/clean-report.sh
+```
+
+Pour produire le rendu final avec le JAR et une archive minimale :
+
+```bash
+./scripts/package.sh
+```
+
+Le packaging exige un arbre Git propre, prend uniquement les fichiers suivis par Git, ajoute `regex-search.jar`, crée une archive déterministe et refuse un ZIP supérieur à 10 Mio. `.git`, `target`, environnements Python, caches et fichiers IDE sont exclus par construction.
 
 ## 6. Diagnostic rapide
 

@@ -83,7 +83,7 @@ Les deux chemins trouvent **644 lignes**. Les temps affichés par ces deux appel
 
 `run.sh` reste le seul script à la racine. Les autres commandes sont dans [`scripts/`](scripts/README.md). Les chemins fournis sont relatifs au répertoire depuis lequel la commande est lancée ; les scripts retrouvent eux-mêmes la racine du projet.
 
-> Les résultats enregistrés par défaut dans `target/benchmarks/` sont effacés au prochain `./run.sh`, car celui-ci exécute `mvn clean`. Utiliser `--output-dir` pour conserver une campagne ailleurs. Les résultats publiés dans `docs/results/` ne sont pas concernés.
+> Les résultats enregistrés par défaut dans `target/benchmarks/` sont effacés au prochain `./run.sh`, car celui-ci exécute `mvn clean`. Utiliser `--output-dir` pour conserver une campagne ailleurs. Les assets publiés dans `docs/assets/` sont conservés.
 
 ## 02 · Une préparation, plusieurs milliers de lignes
 
@@ -93,9 +93,9 @@ flowchart LR
     P --> C{"Concaténation de lettres ?"}
     C -->|"Oui · AUTO ou KMP"| K["Table LPS de KMP"]
     C -->|"Non · ou AUTOMATON imposé"| N["NFA avec ε"]
-    N --> D["DFA du motif"]
+    N --> D["DFA de recherche direct"]
     D --> M["DFAM · identité provisoire"]
-    M --> S["Préparation de la recherche"]
+    M --> S["Indexation des transitions"]
     K --> L["Recherche sur chaque ligne"]
     S --> L
     F["Fichier UTF-8 · lecture bufferisée"] --> L
@@ -104,20 +104,49 @@ flowchart LR
     style L fill:#e3f4ef,stroke:#16866b,color:#124a3b
 ```
 
-La préparation du motif se fait **avant** la boucle de lecture. Les objets `Prepared` ne conservent pas la position atteinte dans la ligne précédente. Le lecteur utilise un tampon de 64 K caractères et ne conserve pas les anciennes lignes ; le mode d’affichage transmet chaque correspondance immédiatement, tandis qu’une ligne exceptionnellement longue doit toutefois tenir en mémoire.
+La préparation du motif se fait **avant** la boucle de lecture. Le parseur et le constructeur NFA sont linéaires et itératifs. Le comptage traite des blocs de 64 K caractères avec un curseur réinitialisé entre les lignes : même une très longue ligne ne doit pas tenir en mémoire. Le mode d’affichage conserve une ligne entière pour pouvoir la restituer. Les motifs acceptant le mot vide correspondent à toutes les lignes et évitent la construction des automates.
 
 Le choix de KMP repose sur l’arbre syntaxique. Par exemple, `a.b` contient un point universel et utilise les automates, tandis que `a\.b` représente trois caractères littéraux et peut utiliser KMP. Tester simplement si la chaîne contient un point conduirait à un mauvais choix.
 
-## 03 · Des résultats consultables et reproductibles
+[Modifications et complexités des optimisations](docs/07-optimisations.md).
 
-La campagne du **22 septembre 2026** porte sur dix expériences : six motifs ou stratégies sur le livre fourni, puis le même livre répété huit et trente-deux fois. Chaque expérience comprend **20 mesures par moteur**, après des passages préalables. Les données et le programme de tracé sont conservés avec la documentation.
+## 03 · Protocole expérimental reproductible
 
-![Temps complets des commandes sur six cas de recherche, avec moyenne et écart type](docs/assets/latency.svg)
+Le profil versionné [`readme-v2`](scripts/report-profile.json) fixe les corpus, graines, options Java 21 et répétitions. Les motifs littéraux ne servent plus qu'à établir des **témoins KMP** : les expériences automate utilisent des alternatives, wildcards et une famille paramétrée `(a|b)*a(a|b)…(a|b)b` qui fait réellement croître le NFA puis le DFA de recherche. Le profil structurel (états/transitions) est collecté **hors chronométrage** et publié avec les temps.
 
-**Comment lire cette figure :** le temps inclut le lancement du processus, donc le démarrage de la JVM pour Java, puis la préparation, les entrées-sorties et la recherche. Les barres d’erreur représentent un écart type d’échantillon. Ce n’est pas une mesure du seul parcours de l’automate.
+> `docs/assets/benchmark.json` fait foi pour les figures actuellement versionnées. Tant qu'une première campagne `readme-v2` n'a pas été exécutée sur un commit propre, les SVG présents peuvent encore provenir de `readme-v1`; la nouvelle campagne les remplacera tous dans une transaction unique.
 
-→ [Protocole, courbe de taille et discussion des résultats](docs/05-experiences.md)  
-→ [Données brutes et empreintes des sources mesurées](docs/results/2026-09-22/campaign.json)
+```bash
+# Campagne de référence : exige un arbre Git propre.
+./scripts/report-campaign.sh
+
+# Même campagne, puis suppression des CSV/TXT locaux après publication.
+./scripts/report-campaign.sh --purge
+
+# Essai de développement : autorise Git sale mais ne remplace pas docs/assets/.
+./scripts/report-campaign.sh --allow-dirty
+
+# Nettoyer toutes les sorties locales de benchmark sans toucher aux assets publiés.
+./scripts/clean-report.sh
+```
+
+Une campagne réussie suit toujours le même ordre : **préflight → tests → corpus dérivés → validation exacte contre GNU grep → profil structurel → mesures CLI → mesures JVM → agrégation → figures → publication atomique → nettoyage**. `docs/assets/` n'est remplacé qu'après toutes les vérifications ; une erreur laisse l'ancienne référence intacte. Les répertoires de travail, corpus ×8/×32 et doubles PNG sont supprimés après succès. Sans `--purge`, les CSV/TXT restent sous `target/report/results/` pour audit ; avec `--purge`, ils sont supprimés seulement après publication des SVG, `benchmark.md` et `benchmark.json`.
+
+![Commandes complètes : témoins et regex automates de complexité croissante](docs/assets/latency.svg)
+
+![Effet du volume avec la même regex complexe et le même automate](docs/assets/scaling.svg)
+
+Le graphique `compilation.svg` utilise la famille de croissance contrôlée : profondeur 5, 7 puis 9. Sur l'implémentation actuelle, elle construit environ 66, 258 puis 1 026 états dans le DFA de recherche ; cette série est donc plus informative qu'une simple augmentation de la longueur d'un mot littéral. **DFAM reste volontairement inchangé** dans cette refonte : la minimisation reste le travail du binôme.
+
+Pour produire le rendu final, le packaging part uniquement des fichiers suivis par Git et du JAR compilé :
+
+```bash
+./scripts/package.sh
+# -> dist/regex-search.jar
+# -> dist/regex-search-submission.zip (refusé automatiquement au-delà de 10 Mio)
+```
+
+Le packaging exige un arbre Git propre et exclut mécaniquement `.git`, `target`, caches, environnements Python et fichiers IDE.
 
 ## 04 · Lire le dépôt
 
@@ -130,8 +159,7 @@ regex-search/
 ├── scripts/                          # benchmark, comparaison et campagne du rapport
 ├── docs/
 │   ├── 01-utilisation.md …            # chapitres détaillés
-│   ├── assets/                       # graphiques reproductibles
-│   └── results/                      # mesures brutes, versions et paramètres
+│   └── assets/                       # six SVG publiés, rapport et manifeste reproductibles
 └── src/
     ├── main/java/com/sorbonne/
     │   ├── automata/                 # états, transitions et graphes

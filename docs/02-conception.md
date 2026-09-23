@@ -71,7 +71,7 @@ flowchart TB
         BENCH --> PARSE["RegexParser / SyntaxTree"]
         PARSE --> KMP["KMPSearch.Prepared"]
         PARSE --> NFA["NFA"]
-        NFA --> DFA["DFA"]
+        NFA --> DFA["DFA de recherche direct"]
         DFA --> DFAM["DFAM · provisoire"]
         DFAM --> SEARCH["NativeSearch.Prepared"]
     end
@@ -92,7 +92,7 @@ Le [modèle d’automate](../src/main/java/com/sorbonne/automata/) ne lit pas le
 
 ### Automaton
 
-Les états sont stockés dans un `LinkedHashSet<State>`, les transitions dans une `ArrayList<Transition>`. L’ordre d’insertion rend les représentations lisibles et relativement stables ; il ne définit pas l’état initial. Les rôles initiaux et finaux dépendent du `Status` porté par chaque état.
+Les états sont stockés dans un `LinkedHashSet<State>`, les transitions dans une `ArrayList<Transition>`. Un index des arcs par source est maintenu lors des ajouts ; les listes exposées restent des instantanés non modifiables. L’ordre d’insertion rend les représentations lisibles et relativement stables ; il ne définit pas l’état initial. Les rôles initiaux et finaux dépendent du `Status` porté par chaque état.
 
 Les collections exposées ne permettent pas d’ajouter ou de retirer directement des éléments. Cela ne rend pas tout le graphe immuable : un `State` reste modifiable, et plusieurs graphes peuvent référencer le même objet.
 
@@ -125,7 +125,7 @@ boolean first = search.search("Elizabeth enters the room.");
 boolean second = search.search("Darcy remains silent.");
 ```
 
-La table LPS de KMP n’est pas reconstruite entre ces deux appels. `NativeSearch.Prepared` conserve quant à lui des index privés construits sur une copie de l’automate. Les variables qui suivent la progression dans le texte sont locales à chaque appel.
+La table LPS de KMP n’est pas reconstruite entre ces deux appels. `NativeSearch.Prepared` conserve des tables privées d’entiers indépendantes des mutations du graphe. Les deux moteurs implémentent `PreparedSearch` ; `newCursor()` crée un état de recherche en flux indépendant, réinitialisable à chaque nouvelle ligne.
 
 ## 5. Entrées-sorties et mémoire
 
@@ -133,15 +133,15 @@ La table LPS de KMP n’est pas reconstruite entre ces deux appels. `NativeSearc
 
 Le tampon réduit le nombre de petits accès au lecteur sous-jacent. Sa taille est un compromis de mise en œuvre, **pas une valeur démontrée optimale** : aucune campagne ne compare ici plusieurs tailles de tampon.
 
-Le programme garde une ligne à la fois. Sa mémoire de parcours dépend donc du tampon et de la plus longue ligne, et non directement du nombre total de lignes. En revanche, `readLine()` construit bien une chaîne pour chaque ligne : une ligne de plusieurs centaines de mégaoctets reste un cas coûteux.
+Le comptage utilise `FileLoader.count` : lecture par blocs et conservation du seul état du moteur, sans allocation d’une chaîne par ligne. Sa mémoire de parcours dépend du tampon, même pour une ligne de plusieurs centaines de mégaoctets. Le mode d’affichage utilise encore `readLine()` pour restituer la ligne complète.
 
-Les séparateurs LF, CRLF et CR sont retirés par le lecteur. Une dernière ligne sans séparateur final est traitée. Une fin de fichier immédiatement après un LF ne crée pas de ligne vide supplémentaire.
+Les séparateurs LF, CRLF et CR sont reconnus, même lorsqu’un CRLF traverse deux blocs. Une dernière ligne sans séparateur final est traitée. Une fin de fichier immédiatement après un LF ne crée pas de ligne vide supplémentaire.
 
 ## 6. Ce que le résultat permet de vérifier
 
 `Result` associe le fichier, le motif, la stratégie réellement choisie, les deux compteurs et les durées. `Timings` distingue l’analyse syntaxique, la construction NFA, la déterminisation, l’appel à DFAM et la préparation du moteur.
 
-Le temps de parcours inclut **ouverture, lecture, décodage, recherche, comptage et fermeture**. Il ne s’agit pas d’un temps de recherche isolé. Les étapes non exécutées sur le chemin KMP valent zéro. Le temps total est la somme de la préparation globale et du parcours, mesurés à partir de frontières communes.
+Le temps de parcours inclut **ouverture, lecture, décodage, recherche, comptage et fermeture**. Il ne s’agit pas d’un temps de recherche isolé. Les étapes non exécutées sur le chemin KMP ou pour un motif nullable valent zéro. Pour les autres motifs, `dfaNanos` mesure la construction du DFA de recherche et `searchPreparationNanos` son indexation, sans deuxième déterminisation. Le temps total est la somme de la préparation globale et du parcours, mesurés à partir de frontières communes.
 
 En cas d’erreur, le pipeline ne rend pas un compte partiel présenté comme un succès. La fermeture du lecteur est assurée par `try-with-resources`.
 

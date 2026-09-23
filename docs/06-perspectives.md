@@ -2,7 +2,7 @@
 
 # 06 — Limites actuelles, prochaines étapes et rendu
 
-Le projet permet déjà de suivre une expression jusqu’à une recherche dans un fichier, de vérifier des propriétés sur les transformations d’automates et de confronter les résultats à GNU grep. La campagne confirme l’intérêt pratique du chemin KMP sur le motif littéral étudié. Elle montre aussi que le temps complet d’une commande ne se résume pas au coût théorique de sa boucle de recherche.
+Le projet permet déjà de suivre une expression jusqu’à une recherche dans un fichier, de vérifier des propriétés sur les transformations d’automates et de confronter les résultats à GNU grep. La campagne fixe confronte KMP et les automates au même motif littéral. Elle montre aussi que le temps complet d’une commande ne se résume pas au coût théorique de sa boucle de recherche.
 
 La suite du travail doit maintenant fermer les écarts avec le sujet et approfondir les mesures. Ajouter un algorithme sans tests de préservation du langage, ou annoncer un gain sans refaire la campagne, laisserait le rapport et le code décrire deux versions différentes.
 
@@ -15,9 +15,9 @@ La suite du travail doit maintenant fermer les écarts avec le sujet et approfon
 | NFA → DFA par sous-ensembles              | Implémenté                             | Tests de langage et de déterminisme                  |
 | DFA équivalent minimal                    | **À implémenter**                      | `DFAM.minimize` est une identité                     |
 | Recherche dans les lignes d’un fichier    | Implémentée sous forme de comptage     | Lecture bufferisée et tests sur fichiers             |
-| Affichage des lignes comme egrep          | **À compléter**                        | Aucun mode de sortie des lignes actuellement         |
+| Affichage des lignes comme egrep          | Implémenté                             | `search.sh`, lignes numérotées et validation exacte         |
 | KMP expliqué et confronté aux automates   | Présent                                | Chapitres 3 et 5, même mot et même corpus            |
-| Comparaison des performances à egrep      | Première campagne disponible           | GNU grep sur macOS ; protocole de processus complets |
+| Comparaison des performances à egrep      | Campagne reproductible avec assets publiés           | GNU grep sur macOS ; protocole de processus complets |
 | Tests et rapport argumenté                | Présents, à maintenir                  | Exemples, génération, données brutes et figures      |
 | Rapport final de 5 à 10 pages, 12 maximum | À composer pour le rendu               | Cette documentation constitue la matière détaillée   |
 
@@ -38,17 +38,17 @@ La validation devra comparer les langages avant et après, vérifier le détermi
 
 La campagne pourra alors publier le nombre d’états et d’arcs avant/après, le coût de minimisation et l’effet sur la recherche. Une réduction de taille ne sera pas automatiquement un gain de temps sur de petits fichiers : il faudra amortir son coût de préparation.
 
-## 3. Compléter la sortie de recherche
+## 3. Maintenir le contrat de sortie de recherche
 
 Le mode `scripts/search.sh` affiche désormais les lignes avec leur numéro, ce qui rapproche l’interface de l’usage attendu d’egrep. Il permet de vérifier que les **mêmes lignes**, et pas seulement le même nombre de lignes, sont sélectionnées.
 
-Cette sortie devra rester séparée du protocole de comptage. Comparer un moteur qui imprime toutes les lignes à un autre qui n’imprime qu’un entier changerait le travail mesuré. Le contrôle exact des résultats peut s’effectuer avant le chronométrage, puis les deux commandes mesurées conserver le mode compteur.
+Cette sortie reste séparée du protocole de comptage. Comparer un moteur qui imprime toutes les lignes à un autre qui n’imprime qu’un entier changerait le travail mesuré. La campagne fixe contrôle les lignes exactes avant le chronométrage, puis les deux commandes mesurées conservent le mode compteur.
 
 ## 4. Approfondir les coûts observés
 
-Le premier travail utile serait de mesurer les phases de préparation sur des motifs de tailles variées : parseur, construction NFA, déterminisation et préparation de recherche. Cela permettrait de relier les courbes aux recopies et aux sous-ensembles réellement produits.
+La campagne mesure désormais une famille d’automates à profondeur 5, 7 et 9 et enregistre directement le nombre d’états/transitions du NFA et du DFA de recherche. Cela remplace la longueur d’un motif littéral par une variable structurelle réellement liée au coût de déterminisation.
 
-Sur le parcours, une campagne dans une JVM persistante compléterait l’usage en ligne de commande. Elle devrait annoncer précisément si elle inclut le décodage, la création des lignes et la lecture du fichier. Charger tout le corpus en mémoire répondrait à une autre question et modifierait le profil mémoire ; ce choix devrait apparaître dans le protocole.
+Le parcours est aussi mesuré dans cinq JVM par cas, avec lecture et décodage inclus. Charger tout le corpus en mémoire répondrait à une autre question et modifierait le profil mémoire ; ce choix devrait apparaître dans le protocole.
 
 Quelques familles de cas restent à étudier :
 
@@ -57,11 +57,11 @@ Quelques familles de cas restent à étudier :
 | Plusieurs livres et types de textes      | Ne pas généraliser à partir d’une seule distribution de lignes |
 | Motifs plus longs et préfixes répétitifs | Étudier KMP et le coût du parseur au-delà des exemples courts  |
 | Alternances et étoiles plus complexes    | Mesurer le nombre de sous-ensembles accessibles                |
-| Longues lignes isolées                   | Examiner les allocations de `readLine` et la mémoire maximale  |
+| Longues lignes isolées                   | Mesurer la mémoire du comptage par blocs et de l’affichage par ligne |
 | Différentes tailles de tampon            | Justifier empiriquement le compromis des 64 K caractères       |
 | Plusieurs campagnes et machines          | Séparer une tendance robuste du bruit local                    |
 
-Les optimisations envisageables doivent être reliées à un coût identifié. Des fragments NFA assemblés dans un graphe commun éviteraient des recopies. Des identifiants d’états compacts et des ensembles de bits pourraient réduire les allocations pendant la déterminisation. Une simulation NFA ou une déterminisation à la demande pourraient éviter de construire tout le DFA avant de parcourir un petit fichier. Ces pistes ne sont ni implémentées ni mesurées dans cette version.
+Les optimisations envisageables doivent être reliées à un coût identifié. Le parseur itératif, les fragments NFA dans un graphe commun, les ensembles de bits, la préparation directe du DFA de recherche et le comptage par blocs sont maintenant implémentés. Une simulation NFA ou une déterminisation à la demande pourraient éviter de construire tout le DFA avant de parcourir un petit fichier. La simulation NFA et la déterminisation à la demande ne sont pas implémentées ; la référence expérimentale publiée mesure les optimisations actuelles.
 
 <a id="rendu"></a>
 
@@ -82,18 +82,24 @@ Un plan de synthèse de dix pages peut reprendre :
 | 8–9               | Protocole, deux ou trois figures, résultats et discussion        |
 | 10                | Limites, conclusion et références                                |
 
-Les CSV complets, commandes détaillées et guides d’installation restent consultables dans l’archive. Ils n’ont pas besoin d’occuper les pages du rapport principal. L’objectif est qu’un lecteur puisse vérifier les affirmations sans être obligé de parcourir des dizaines de tableaux.
+Les CSV complets restent locaux dans `target/report/results/` ; le profil, les statistiques publiées et les guides sont versionnés. Ils n’ont pas besoin d’occuper les pages du rapport principal. L’objectif est qu’un lecteur puisse vérifier les affirmations sans être obligé de parcourir des dizaines de tableaux.
 
 ### Préparer l’archive
 
-Le sujet demande le code commenté, la documentation, un binaire, les instances de test et un moyen de construction, avec un volume de l’ordre d’une dizaine de mégaoctets. Il mentionne Makefile ou Ant ; le dépôt utilise actuellement Maven et Bash. Cette différence d’outillage doit être vérifiée pour le rendu, sans prétendre qu’un Makefile est déjà fourni.
+Le sujet demande le code commenté, la documentation, un binaire, les instances de test et un moyen de construction, avec un volume de l’ordre d’une dizaine de mégaoctets. Le dépôt fournit Maven **et** `build.xml` pour Ant. La cible Java est revenue à **Java 21**, version LTS largement disponible et suffisante pour les sources actuelles.
 
-Ne pas inclure `target/report-corpora/`, le cache Maven ou un environnement virtuel Python : les corpus ×8 et ×32 sont régénérables, et leur présence gonflerait inutilement l’archive. Conserver en revanche le JAR construit pour le rendu, les sources, les fichiers texte nécessaires, les données brutes publiées et leurs instructions de reproduction.
+Le packaging est automatisé :
+
+```bash
+./scripts/package.sh
+```
+
+Le script exige un arbre Git propre, relance les tests, construit le JAR, puis archive uniquement les chemins retournés par `git ls-files` et `regex-search.jar`. `.git`, `target`, `.cache`, `.venv*`, caches Python, fichiers IDE et artefacts de modernisation ne peuvent donc pas entrer dans le ZIP. L’archive est refusée si elle dépasse 10 Mio et contient un manifeste avec le commit et le SHA-256 du JAR.
 
 ## 6. Ce que cette version permet de conclure
 
-La chaîne implémentée sait préparer un motif et rechercher ses occurrences sans conserver tout le fichier en mémoire. Les tests donnent des éléments solides sur la préservation du langage et le comportement des deux moteurs dans le domaine couvert. Sur la campagne publiée, KMP est le chemin le moins coûteux du projet pour le mot littéral choisi ; GNU grep reste plus rapide en temps de commande complet.
+La chaîne implémentée sait préparer un motif et rechercher ses occurrences sans conserver tout le fichier en mémoire. Les tests donnent des éléments solides sur la préservation du langage et le comportement des deux moteurs dans le domaine couvert. Les statistiques publiées permettent de comparer les moteurs sur chaque motif et chaque périmètre mesuré.
 
-La minimisation et la sortie des lignes restent nécessaires pour achever le périmètre annoncé. Les ajouter, puis réexécuter les mêmes protocoles, donnera une base de comparaison plus informative que de changer simultanément les motifs, les fichiers et la méthode de mesure.
+La minimisation reste nécessaire pour achever le périmètre annoncé. L’ajouter, puis réexécuter le même protocole, donnera une base de comparaison plus informative que de changer simultanément les motifs, les fichiers et la méthode de mesure.
 
 [← Expériences](05-experiences.md) · [Accueil](../README.md) · [Références →](references.md)

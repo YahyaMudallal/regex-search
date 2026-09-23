@@ -21,7 +21,7 @@ Les coûts « moyens » ci-dessous supposent des accès moyens constants aux tab
 
 ## 2. Construire l’arbre syntaxique
 
-Le [parseur](../src/main/java/com/sorbonne/regex/RegexParser.java) commence par distinguer les lettres des opérateurs. Il réduit ensuite les groupes entre parenthèses, les étoiles, les concaténations et les alternatives, dans cet ordre.
+Le [parseur](../src/main/java/com/sorbonne/regex/RegexParser.java) distingue les lettres des opérateurs, puis utilise une pile d’opérandes et une pile d’opérateurs. Les priorités sont étoile, concaténation et alternative ; les parenthèses délimitent les réductions. Les opérateurs binaires sont associatifs à gauche.
 
 Pour `a|bc*`, la structure est :
 
@@ -36,9 +36,9 @@ flowchart TB
 
 L’arbre garde le rôle des caractères. La feuille issue de `\.` représente un point littéral ; un point non échappé devient un nœud `DOT`. C’est cette distinction qui permet au benchmark de sélectionner le bon moteur.
 
-**Coût du code actuel.** La tokenisation est linéaire en $m$. La réduction ne l’est pas nécessairement : les méthodes parcourent des listes pour réduire un opérateur à la fois. Sur une longue concaténation plate, la somme des parcours est de l’ordre de $m+(m-1)+\cdots+1$, soit $\Theta(m^2)$. Le traitement des parenthèses utilise également des insertions en tête d’`ArrayList` et des passages récursifs. Nous ne revendiquons donc pas un parseur globalement linéaire.
+**Coût du code actuel.** Chaque jeton est lu une fois, chaque opérateur est empilé et dépilé une fois : temps et mémoire $O(m)$, arbre compris. Les groupes ne produisent pas de nœuds de protection intermédiaires. Les échappements, y compris un antislash final littéral, sont conservés.
 
-L’arbre final contient $O(m)$ nœuds. Sa profondeur peut aussi atteindre $O(m)$, ce qui rend les parcours récursifs sensibles à des expressions très longues. Un parseur à pile, avec gestion explicite des priorités, serait une piste pour obtenir une analyse plus prévisible ; ce n’est pas l’implémentation mesurée ici.
+La profondeur de l’arbre peut atteindre $O(m)$, mais ni le parseur ni le constructeur NFA n’utilisent la récursion Java. Les tests couvrent 20 000 lettres concaténées et 20 000 niveaux de groupes ou d’étoiles sans seuil temporel dépendant de la machine.
 
 ## 3. Passer de l’arbre à un NFA avec ε
 
@@ -73,15 +73,11 @@ flowchart LR
 
 La justification se fait par induction sur l’arbre. Une feuille reconnaît exactement son caractère. Une concaténation doit traverser successivement les deux fragments. Une alternative choisit l’une des branches. L’étoile peut éviter le fragment, le parcourir une fois ou reprendre sa boucle autant de fois que nécessaire. Les transitions ε assurent ces compositions sans ajouter de caractère au mot reconnu.
 
-Le constructeur modifie les anciens statuts d’entrée et de sortie au moment d’assembler les fragments. Cela explique pourquoi le graphe de base autorise des états mutables. Ces fragments sont internes à la construction ; il ne faut pas les interpréter comme des graphes immuables partagés librement avec d’autres traitements.
+Le constructeur travaille dans un graphe commun. Une pile explicite effectue le parcours postordre ; chaque fragment ne conserve que son entrée et sa sortie. Tous les états sont initialement intermédiaires, puis seules les extrémités du fragment final reçoivent les statuts initial et final.
 
-### Taille linéaire, temps de construction à distinguer
+### Taille et construction linéaires
 
-Le nombre final d’états et d’arcs est $O(m)$ : chaque opérateur ajoute un nombre constant d’éléments. Une construction par fragments reliés dans un même graphe peut réaliser ce travail en temps linéaire.
-
-Dans le code actuel, `mergeInto` réinsère les états et transitions des sous-automates dans un nouveau conteneur. Sur un arbre déséquilibré, un même préfixe est recopié plusieurs fois. Le travail cumulé peut donc atteindre $O(m^2)$ en moyenne pour les accès aux ensembles. Les recherches des états initiaux et finaux ajoutent elles aussi des parcours de sous-graphes.
-
-La borne linéaire sur la **taille finale** reste vraie. Elle ne suffit pas à décrire le volume d’allocations et de copies effectué pendant la construction. C’est une optimisation possible avant de tirer des conclusions générales sur le coût de compilation des regex.
+Chaque nœud ajoute un nombre constant d’états et d’arcs, sans recopier les sous-graphes ni rechercher leurs extrémités. La construction est $O(m)$ en temps moyen avec les ensembles de hachage, et $O(m)$ en mémoire. Elle ne modifie pas l’arbre fourni.
 
 ## 4. Déterminiser par les sous-ensembles
 
@@ -99,7 +95,7 @@ $$
 \delta_D(S,c)=\varepsilon\text{-fermeture}\left(\bigcup_{q\in S}\delta_N(q,c)\right).
 $$
 
-L’ensemble obtenu est final s’il contient au moins un état final du NFA. Une file traite les ensembles accessibles ; une table associe chaque ensemble immuable à son état DFA. Les cycles ε terminent parce que la fermeture mémorise les états déjà visités.
+L’ensemble obtenu est final s’il contient au moins un état final du NFA. Une file traite les ensembles accessibles ; une table associe chaque `BitSet`, jamais modifié après insertion, à son état DFA. Les cycles ε terminent parce que la fermeture mémorise les états déjà visités.
 
 **Invariant.** Après lecture d’un préfixe $u$, l’état courant du DFA représente exactement tous les états dans lesquels le NFA pourrait se trouver après $u$, transitions ε comprises. Le critère d’acceptation découle directement de cet invariant.
 
@@ -109,7 +105,7 @@ Le résultat est un **DFA partiel**. Quand aucun état n’est atteignable, aucu
 
 Supposons que deux branches proposent un arc sur `a` et un arc universel. À la lecture de `a`, **les deux destinations doivent contribuer** au sous-ensemble suivant. Donner arbitrairement priorité à la lettre ferait perdre une partie du langage.
 
-Le code découpe donc l’alphabet en classes disjointes : un singleton par caractère explicite, puis la classe des autres caractères. Les exclusions déjà présentes sur les arcs `ANY` participent aussi à ce découpage.
+Pour chaque sous-ensemble courant, le code découpe l’alphabet en classes disjointes : un singleton par lettre utile dans cet état, puis la classe complémentaire si nécessaire. Les exclusions de ses arcs `ANY` participent au découpage. Les lettres présentes ailleurs dans le NFA ne créent pas d’arcs inutiles ici.
 
 | Classe | Arcs du NFA à prendre en compte |
 | :--- | :--- |
@@ -120,7 +116,7 @@ Dans le DFA, la seconde classe est stockée par `anyExcept`, sans créer 65 536 
 
 ### Coût
 
-L’index des arcs sortants coûte $O(N+E+X)$. Chaque paire « sous-ensemble, classe » peut parcourir au plus les états et arcs de l’entrée pour effectuer le déplacement et la fermeture. La borne utilisée est donc :
+Les index séparent les arcs ε, les arcs littéraux groupés par lettre et les arcs ANY. Un déplacement ignore les arcs portant d’autres lettres, et une fermeture ne suit que les arcs ε. L’indexation et la lecture des exclusions sont bornées par $O(N+E+X)$. Chaque paire « sous-ensemble, classe » peut parcourir au plus les états et arcs de l’entrée pour effectuer le déplacement et la fermeture. La borne utilisée est donc :
 
 $$
 T_D=O\bigl(N+E+X+RK(N+E)\bigr),\qquad R\le 2^N.
@@ -129,10 +125,10 @@ $$
 La mémoire supplémentaire est de l’ordre de :
 
 $$
-O\bigl(N+E+X+R(N+K)\bigr).
+O\bigl(N+E+X+R(\lceil N/64\rceil+K)\bigr).
 $$
 
-Elle comprend les index, les ensembles mémorisés et le graphe produit. L’alphabet `char` est borné ; la recherche d’un représentant de la classe complémentaire est donc elle aussi bornée par sa taille. L’explosion du nombre de sous-ensembles reste la difficulté principale : indexer les arcs évite des parcours inutiles, mais ne supprime pas cette croissance possible.
+Elle comprend les index, les bitsets mémorisés en mots de 64 bits, le graphe produit et ses exclusions locales. $K$ majore le nombre de classes locales. Aucune table de toutes les fermetures ε, potentiellement quadratique, n’est pré-calculée. L’alphabet `char` est borné ; la recherche d’un représentant de la classe complémentaire est donc elle aussi bornée par sa taille. L’explosion du nombre de sous-ensembles reste la difficulté principale : indexer les arcs évite des parcours inutiles, mais ne supprime pas cette croissance possible.
 
 ## 5. La minimisation : une étape prévue, pas un résultat acquis
 
@@ -150,26 +146,25 @@ Le contrat de la future version devra préserver le langage, traiter correctemen
 
 Le DFA précédent reconnaît un **mot entier**. Pour chercher ce mot partout dans une ligne, il ne suffit pas de revenir à son état initial après chaque échec. Exemple : chercher `ab` dans `aab`. Après avoir consommé le premier `a`, un échec sur le second `a` peut faire oublier que ce second caractère est lui-même le début d’une occurrence.
 
-La [préparation](../src/main/java/com/sorbonne/search/NativeSearch.java) traite tous les départs possibles simultanément. Elle copie le DFA, ajoute un nouveau départ avec une boucle universelle et le relie à l’ancien départ par ε. Puis elle détermine ce graphe augmenté.
+La [préparation](../src/main/java/com/sorbonne/search/NativeSearch.java) traite tous les départs simultanément, directement depuis le NFA. Si $S_0$ est la fermeture ε du départ, la construction de `DFA.forSearch` utilise :
 
-```mermaid
-flowchart LR
-    S(("nouveau départ")) -->|"tout caractère"| S
-    S -->|ε| Q0(("ancien départ"))
-    Q0 -->|"mot du langage"| F((("état final")))
-```
+$$
+S' = \varepsilon\text{-fermeture}(\operatorname{move}(S,c)) \cup S_0.
+$$
 
-Le graphe augmenté reconnaît $\Sigma^*L(r)$. Pendant la lecture, le moteur s’arrête dès qu’un **préfixe** de la ligne est accepté. Ce préfixe se décompose alors en un contexte quelconque suivi d’un mot de $L(r)$ : une occurrence vient d’être trouvée. Le suffixe de la ligne n’a pas besoin d’être parcouru par le moteur, même si le lecteur a déjà construit la ligne entière.
+Réinjecter $S_0$ permet de recommencer au caractère suivant sans oublier les occurrences en cours. Le moteur teste l’acceptation avant la lecture et après chaque caractère.
 
-Le nouvel état initial est testé avant tout caractère. Si le motif accepte ε, la recherche réussit immédiatement, y compris sur une ligne vide.
+Tous les sous-ensembles acceptants partagent un état terminal sans transitions. La recherche s’arrête immédiatement à cet état : développer ses continuations serait inutile. Ce DFA est destiné à la détection d’une occurrence, **pas à la reconnaissance d’un mot entier**. Pour cette dernière opération, `DFA.convert` conserve les transitions après acceptation.
 
-### Une seconde déterminisation, à compter dans la préparation
+### Une seule déterminisation dans le pipeline
 
-Cette stratégie paie la gestion des départs possibles avant le parcours du texte. Elle implique une **nouvelle déterminisation**, qui peut être exponentielle en la taille du DFA fourni. Minimiser le DFA du motif pourra réduire cette entrée, mais ne prouvera pas que le DFA de recherche finalement obtenu est minimal.
+`Benchmark` construit le NFA, appelle `DFA.forSearch`, transmet le résultat à l’étape DFAM inchangée puis l’indexe avec `NativeSearch.fromSearchDfa`. Il n’y a plus de deuxième déterminisation. `NativeSearch.prepareNfa` fournit également cette préparation directe ; l’ancienne méthode `prepare` conserve son contrat de validation d’un DFA de mots entiers.
 
-Le moteur préparé stocke des index par état et par caractère, ainsi qu’un éventuel arc complémentaire. Pour une ligne de longueur $n$, le parcours est $O(n)$ en moyenne et utilise $O(1)$ de mémoire supplémentaire, en dehors de l’index déjà construit. La préparation et la taille de cet index doivent être comptées séparément.
+Si l’arbre accepte ε, `Benchmark` utilise directement un moteur toujours vrai. Il parcourt encore le fichier pour compter ou restituer les lignes et détecter les erreurs de décodage. La stratégie annoncée reste AUTOMATON pour un motif non littéral, mais les phases NFA/DFA/DFAM non exécutées valent zéro.
 
-`NativeSearch` ne désigne pas le moteur regex natif de Java. C’est le moteur du projet, qui ne délègue ni à `String.contains` ni à `Pattern`.
+L’index contient des identifiants entiers, une classification globale des caractères et des pages de transitions avec destination par défaut. Seules les pages contenant des exceptions sont allouées. L’indexation reste bornée par $O(RK+T+X)$ au pire, mais n’alloue pas systématiquement une table dense $RK$. Le parcours fait des accès directs : $O(n)$ temps au pire et $O(1)$ mémoire supplémentaire hors index.
+
+La déterminisation reste potentiellement exponentielle. Aucun budget d’états ni repli sur une simulation NFA n’est encore implémenté. `NativeSearch` ne délègue ni à `String.contains` ni à `Pattern`.
 
 ## 7. KMP pour les motifs littéraux
 
@@ -191,25 +186,25 @@ La construction LPS est $O(m)$ en temps et en mémoire. La recherche est $O(n)$ 
 Sur un fichier entier, avec une préparation unique :
 
 $$
-T_{KMP}=O(m+C+L),\qquad M_{KMP}=O(m+B+M).
+T_{KMP}=O(m+C+L),\qquad M_{KMP}=O(m+B)\quad\text{en comptage}.
 $$
 
-Cette formule décrit le moteur et le parcours. Le benchmark actuel analyse d’abord l’expression pour décider si elle est littérale : **le coût du parseur s’ajoute**. Le temps complet de `Benchmark` sur une longue expression littérale n’est donc pas garanti par la seule borne linéaire de KMP.
+Le parseur et l’extraction du littéral sont eux aussi linéaires : la borne temporelle couvre donc toute la préparation et le comptage. Un curseur KMP conserve son indice entre les blocs, puis est réinitialisé à chaque frontière de ligne. Le mode d’affichage garde une ligne entière et ajoute $O(M)$ mémoire.
 
 ## 8. Bilan des coûts et portée des optimisations
 
 | Étape | Temps / propriété du code actuel | Limite à garder en tête |
 | :--- | :--- | :--- |
-| Analyse syntaxique | Tokenisation linéaire ; réductions quadratiques sur une longue concaténation | Parcours de listes et profondeur récursive |
-| NFA | Taille finale $O(m)$ ; assemblages pouvant coûter $O(m^2)$ | Recopie des sous-graphes |
+| Analyse syntaxique | $O(m)$ | Piles explicites, arbre de taille $O(m)$ |
+| NFA | $O(m)$ temps moyen et mémoire | Graphe commun, aucune copie de fragment |
 | DFA | $O(N+E+X+RK(N+E))$ en moyenne | $R$ peut atteindre $2^N$ |
 | DFAM | $O(1)$ actuellement | Identité provisoire, aucune minimisation |
-| Préparation NativeSearch | Copie/indexation puis nouvelle déterminisation | Explosion possible pendant la préparation |
-| Recherche NativeSearch préparée | $O(n)$ en moyenne | Coût et taille de l’index exclus de ce parcours |
+| Préparation NativeSearch | Une déterminisation directe, puis indexation par pages | Explosion possible pendant la préparation |
+| Recherche NativeSearch préparée | $O(n)$ au pire | Coût et taille de l’index exclus de ce parcours |
 | Préparation KMP | $O(m)$ | Motif littéral uniquement |
 | Recherche KMP préparée | $O(n)$ | Préparation et parseur à ajouter au temps complet |
-| Parcours bufferisé | $O(C+L)$ | Une ligne complète reste allouée |
+| Comptage par blocs | $O(C+L)$ temps, $O(B)$ mémoire hors moteur | Affichage : une ligne entière reste allouée |
 
-Les décisions favorables au parcours sont concrètes : préparer une fois, indexer les arcs, ne pas afficher les lignes pendant les mesures et réutiliser les tables KMP. Elles ne justifient pas l’affirmation générale « le projet est optimal ». Le parseur, les copies de fragments, les états possibles et la gestion mémoire restent des coûts observables ou à mesurer.
+Le rendu d’`Automaton` utilise aussi un index des arcs sortants : $O(N+E+Z)$ pour $Z$ caractères produits. Le rendu de `SyntaxTree` est itératif et utilise un accumulateur unique ; son coût dépend de la taille de sortie, qui peut être quadratique avec l’indentation d’un arbre profond. Les optimisations ne suppriment pas l’explosion possible du DFA et ne constituent pas une minimisation. Les mesures archivées du 22 septembre décrivent la version précédente.
 
 [← Conception](02-conception.md) · [Accueil](../README.md) · [Validation →](04-validation.md)
