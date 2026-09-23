@@ -1,0 +1,7 @@
+WORKING-COPY ARCHIVE (not the official package.sh output)
+java_release=21
+jar_sha256=208892a9b5b68bba2bfeb6bee23732a29a80e077919098364cf78ded028d0fc0
+protocol_python_tests=22/22 passed
+java_compile=javac --release 21 -Xlint:all passed
+maven_campaign=not rerun; Maven unavailable in execution environment
+excluded=.git,.venv-report,.cache,target,.vscode,dist,.github/modernize,__pycache__
