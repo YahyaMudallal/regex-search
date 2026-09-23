@@ -50,7 +50,7 @@ public class KMPSearch implements SearchAlgorithm<String> {
     }
 
     /** Motif et table LPS partagés ; les positions de recherche restent locales à chaque appel. */
-    public static final class Prepared {
+    public static final class Prepared implements PreparedSearch {
         /** Motif littéral dont les préfixes ont été calculés. */
         private final String pattern;
         /** Table privée des préfixes réutilisables, jamais modifiée après construction. */
@@ -78,31 +78,50 @@ public class KMPSearch implements SearchAlgorithm<String> {
             if (pattern.isEmpty()) {
                 return true;
             }
-
-            // Position du prochain caractère à comparer dans le texte ; elle ne recule jamais.
-            int i = 0;
-            // Position dans le motif, également égale au nombre de caractères déjà reconnus.
+            if (text.length() < pattern.length()) {
+                return false;
+            }
             int j = 0;
-
-            while (i < text.length()) {
-                if (text.charAt(i) == pattern.charAt(j)) {
-                    i++;
-                    j++;
-                }
-
+            for (int i = 0; i < text.length(); i++) {
+                j = advance(j, text.charAt(i));
                 if (j == pattern.length()) {
                     return true;
-                } else if (i < text.length() && text.charAt(i) != pattern.charAt(j)) {
-                    if (j != 0) {
-                        // Réutiliser le plus long préfixe du motif qui termine la partie reconnue.
-                        j = lps[j - 1];
-                    } else {
-                        // Aucun préfixe à réutiliser : essayer le caractère suivant du texte.
-                        i++;
-                    }
                 }
             }
             return false;
+        }
+
+        private int advance(int position, char symbol) {
+            while (position > 0 && symbol != pattern.charAt(position)) {
+                position = lps[position - 1];
+            }
+            return symbol == pattern.charAt(position) ? position + 1 : position;
+        }
+
+        /** Continue entre blocs sans conserver le texte ; reset sépare les lignes. */
+        @Override
+        public SearchCursor newCursor() {
+            return new SearchCursor() {
+                private int position;
+
+                @Override
+                public boolean accept(char symbol) {
+                    if (!matches()) {
+                        position = advance(position, symbol);
+                    }
+                    return matches();
+                }
+
+                @Override
+                public boolean matches() {
+                    return position == pattern.length();
+                }
+
+                @Override
+                public void reset() {
+                    position = 0;
+                }
+            };
         }
     }
 

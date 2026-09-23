@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -33,6 +35,8 @@ public class Automaton {
 
     /** Transitions dans leur ordre d'ajout ; les doublons sont autorisés. */
     private final List<Transition> transitions = new ArrayList<>();
+    /** Index tenu à jour lors des ajouts ; les sources des arcs sont immuables. */
+    private final Map<State, List<Transition>> outgoing = new HashMap<>();
 
     /**
      * Crée un automate vide, sans état ni transition.
@@ -71,6 +75,7 @@ public class Automaton {
         addState(transition.getSource());
         addState(transition.getDestination());
         transitions.add(transition);
+        outgoing.computeIfAbsent(transition.getSource(), key -> new ArrayList<>()).add(transition);
     }
 
     /**
@@ -142,7 +147,7 @@ public class Automaton {
      *
      * <p>Les transitions ε sont incluses. Avec la classe {@link State} actuelle,
      * la recherche compare les objets, pas leurs noms. Un état absent du graphe
-     * donne une liste vide.</p>
+     * donne une liste vide. La copie coûte O(degré sortant), sans parcourir les autres arcs.</p>
      *
      * @param state état de départ recherché, non nul
      * @return liste non modifiable, dans l'ordre d'ajout, sans les ajouts futurs
@@ -150,10 +155,7 @@ public class Automaton {
      */
     public List<Transition> getOutgoingTransitions(State state) {
         Objects.requireNonNull(state, "L'état est obligatoire");
-        return transitions.stream()
-                // transition désigne chaque arc examiné ; seuls ceux partant de state restent.
-                .filter(transition -> transition.getSource().equals(state))
-                .toList();
+        return List.copyOf(outgoing.getOrDefault(state, List.of()));
     }
 
     /**
@@ -180,14 +182,14 @@ public class Automaton {
                     .append(state.getStatus())
                     .append("]");
 
-            List<Transition> outgoing = getOutgoingTransitions(state);
-            if (outgoing.isEmpty()) {
+            List<Transition> arcs = outgoing.getOrDefault(state, List.of());
+            if (arcs.isEmpty()) {
                 builder.append("\n");
                 continue;
             }
 
             builder.append("\n");
-            for (Transition transition : outgoing) {
+            for (Transition transition : arcs) {
                 String label = switch (transition.getType()) {
                     case EPSILON -> "ε";
                     case ANY -> transition.getExcludedSymbols().isEmpty()

@@ -61,6 +61,16 @@ class BenchmarkPropertyTest {
             Benchmark.Result result = new Benchmark(file, expression, strategy).pipeline();
             assertEquals(lines.size(), result.totalLines(), expression);
             assertEquals(expected, result.matchingLines(), expression + " / " + strategy);
+            List<String> expectedLines = new ArrayList<>();
+            for (int i = 0; i < lines.size(); i++) {
+                if (oracle.matcher(lines.get(i)).find()) {
+                    expectedLines.add((i + 1) + ":" + lines.get(i));
+                }
+            }
+            List<String> actualLines = new ArrayList<>();
+            new Benchmark(file, expression, strategy).forEachMatchingLine(
+                    (number, line) -> actualLines.add(number + ":" + line));
+            assertEquals(expectedLines, actualLines, expression + " / lignes / " + strategy);
         }
     }
 }

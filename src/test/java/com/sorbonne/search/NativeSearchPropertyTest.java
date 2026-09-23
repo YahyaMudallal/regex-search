@@ -64,10 +64,20 @@ class NativeSearchPropertyTest {
             return DynamicTest.dynamicTest("Recherche regex — graine=" + seed, () -> {
                 Random random = new Random(seed);
                 SearchGenerators.RegexCase example = SearchGenerators.regex(random, 3);
-                NativeSearch.Prepared prepared = NativeSearch.prepare(DFA.convert(NFA.buildNFA(example.tree())));
+                Automaton nfa = NFA.buildNFA(example.tree());
+                NativeSearch.Prepared prepared = NativeSearch.prepare(DFA.convert(nfa));
+                NativeSearch.Prepared direct = NativeSearch.prepareNfa(nfa);
                 Pattern oracle = Pattern.compile(example.expression(), Pattern.DOTALL);
                 for (int trial = 0; trial < 16; trial++) {
                     String text = SearchGenerators.text(random, 16, "abxé\n\0");
+                    assertEquals(oracle.matcher(text).find(), direct.search(text), "NFA direct : " + example.expression());
+                    SearchCursor cursor = direct.newCursor();
+                    for (int i = 0; i < text.length(); i++) {
+                        cursor.accept(text.charAt(i));
+                    }
+                    assertEquals(oracle.matcher(text).find(), cursor.matches(), "curseur : " + example.expression());
+                    cursor.reset();
+                    assertEquals(oracle.matcher("").find(), cursor.matches());
                     assertEquals(oracle.matcher(text).find(), prepared.search(text),
                             "graine=" + seed + ", essai=" + trial + ", regex=" + example.expression() + ", texte=" + text);
                 }
@@ -87,8 +97,10 @@ class NativeSearchPropertyTest {
                 Random random = new Random(seed);
                 Automaton nfa = SearchGenerators.nfa(random);
                 NativeSearch.Prepared prepared = NativeSearch.prepare(DFA.convert(nfa));
+                NativeSearch.Prepared direct = NativeSearch.prepareNfa(nfa);
                 for (int trial = 0; trial < 12; trial++) {
                     String text = SearchGenerators.text(random, 8, "abxé\n\0\uFFFF");
+                    assertEquals(SearchGenerators.contains(nfa, text), direct.search(text), "NFA direct : " + text);
                     assertEquals(SearchGenerators.contains(nfa, text), prepared.search(text),
                             "graine=" + seed + ", essai=" + trial + ", texte=" + text);
                 }
