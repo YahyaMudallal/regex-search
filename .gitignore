@@ -59,8 +59,9 @@ venv/
 *~
 
 # Les campagnes de travail et corpus dérivés vont dans target/ (déjà ignoré).
-# docs/results/ et docs/assets/ restent versionnés : ce sont les données
-# et figures publiées nécessaires pour vérifier et reproduire le rapport.
+# Seule la référence gelée dans docs/assets/ est versionnée.
+# Aucun historique daté de mesures brutes dans Git.
+/docs/results/
 
 # =========================
 # IDEs

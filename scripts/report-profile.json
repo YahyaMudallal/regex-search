@@ -1,0 +1,146 @@
+{
+  "protocol": "readme-v2",
+  "seed": 20260923,
+  "source": "Samples/PrideAndPrejudice.txt",
+  "source_sha256": "7c13190c04773de0a919e38450ecaac1673fbd572a60bad784ff8421acdfec18",
+  "java_release": 21,
+  "java_options": [
+    "-Xms64m",
+    "-Xmx512m",
+    "-XX:+UseSerialGC",
+    "-XX:ActiveProcessorCount=1",
+    "-Dfile.encoding=UTF-8"
+  ],
+  "cli": {
+    "blocks": 5,
+    "pairs_per_block": 6,
+    "warmups": 3,
+    "timeout_seconds": 60
+  },
+  "jvm": {
+    "forks": 5,
+    "warmups": 10,
+    "samples_per_fork": 10,
+    "timeout_seconds": 180
+  },
+  "noise_iqr_ratio": 0.15,
+  "synthetic": {
+    "blocks": 2048,
+    "prefix_length": 128
+  },
+  "experiments": [
+    {
+      "id": "literal-auto",
+      "label": "Témoin littéral · KMP",
+      "regex": "Elizabeth",
+      "strategy": "AUTO",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "literal-automaton",
+      "label": "Témoin littéral · automate",
+      "regex": "Elizabeth",
+      "strategy": "AUTOMATON",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "alternative",
+      "label": "Alternative large",
+      "regex": "(Elizabeth|Darcy|Bennet|Bingley|Collins|Wickham)",
+      "strategy": "AUTOMATON",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "wildcard",
+      "label": "Branches + wildcard",
+      "regex": "(Elizabeth|Darcy|Bennet|Bingley).*(said|replied|answered|cried)",
+      "strategy": "AUTOMATON",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "absent",
+      "label": "Regex complexe absente",
+      "regex": "(ZXQ|QXZ).*(NEVER|PRESENT)",
+      "strategy": "AUTOMATON",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "nullable",
+      "label": "Mot vide accepté",
+      "regex": "(a|b)*",
+      "strategy": "AUTO",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "complex",
+      "label": "Groupes + alternatives + wildcards",
+      "regex": "((Elizabeth|Darcy|Bennet|Bingley).*(said|replied|answered|cried))|((Mr|Mrs)\\..*(Bennet|Darcy|Bingley))",
+      "strategy": "AUTOMATON",
+      "corpus": "book-1",
+      "group": "book"
+    },
+    {
+      "id": "scale-complex-8",
+      "label": "Regex complexe ×8",
+      "regex": "((Elizabeth|Darcy|Bennet|Bingley).*(said|replied|answered|cried))|((Mr|Mrs)\\..*(Bennet|Darcy|Bingley))",
+      "strategy": "AUTOMATON",
+      "corpus": "book-8",
+      "group": "scale"
+    },
+    {
+      "id": "scale-complex-32",
+      "label": "Regex complexe ×32",
+      "regex": "((Elizabeth|Darcy|Bennet|Bingley).*(said|replied|answered|cried))|((Mr|Mrs)\\..*(Bennet|Darcy|Bingley))",
+      "strategy": "AUTOMATON",
+      "corpus": "book-32",
+      "group": "scale"
+    },
+    {
+      "id": "overlap-kmp",
+      "label": "Préfixes répétés · KMP témoin",
+      "regex": "ababababac",
+      "strategy": "KMP",
+      "corpus": "synthetic",
+      "group": "stress"
+    },
+    {
+      "id": "overlap-automaton",
+      "label": "Préfixes répétés · automate",
+      "regex": "ababababac",
+      "strategy": "AUTOMATON",
+      "corpus": "synthetic",
+      "group": "stress"
+    },
+    {
+      "id": "growth-5",
+      "label": "Croissance DFA · profondeur 5",
+      "branch_depth": 5,
+      "strategy": "AUTOMATON",
+      "corpus": "synthetic",
+      "group": "growth"
+    },
+    {
+      "id": "growth-7",
+      "label": "Croissance DFA · profondeur 7",
+      "branch_depth": 7,
+      "strategy": "AUTOMATON",
+      "corpus": "synthetic",
+      "group": "growth"
+    },
+    {
+      "id": "growth-9",
+      "label": "Croissance DFA · profondeur 9",
+      "branch_depth": 9,
+      "strategy": "AUTOMATON",
+      "corpus": "synthetic",
+      "group": "growth",
+      "cli": false
+    }
+  ]
+}
