@@ -78,6 +78,7 @@ Pour comparer KMP et les automates sur **le même motif** :
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' KMP
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' DFA
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' DFAM
+./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' MOORE
 ```
 
 Les deux chemins trouvent **644 lignes**. Les temps affichés par ces deux appels isolés servent à examiner les étapes, pas à établir une comparaison statistique. Le chapitre expérimental utilise plusieurs répétitions.

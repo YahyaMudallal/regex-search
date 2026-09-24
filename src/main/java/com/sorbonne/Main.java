@@ -38,7 +38,7 @@ import com.sorbonne.search.SearchAlgorithm;
  */
 public class Main {
     /** Aide concise commune au JAR et aux scripts. */
-    private static final String USAGE = "Usage : java -jar regex-search.jar [--count|--print] <fichier> <regex> [AUTO|KMP|DFA|DFAM|AUTOMATON]";
+    private static final String USAGE = "Usage : java -jar regex-search.jar [--count|--print] <fichier> <regex> [AUTO|KMP|DFA|DFAM|MOORE|AUTOMATON]";
 
     /** Ligne utilisée dans la console pour séparer visuellement les sections. */
     private static final String SEPARATOR = "=".repeat(64);
@@ -137,7 +137,7 @@ public class Main {
                     strategy = Benchmark.Strategy.valueOf(args[offset + 2].toUpperCase(Locale.ROOT));
                 } catch (IllegalArgumentException error) {
                     throw new IllegalArgumentException("Stratégie inconnue '" + args[offset + 2]
-                            + "'. Valeurs : AUTO, KMP, DFA, DFAM, AUTOMATON.", error);
+                            + "'. Valeurs : AUTO, KMP, DFA, DFAM, MOORE, AUTOMATON.", error);
                 }
             }
             Benchmark benchmark = new Benchmark(Path.of(args[offset]), args[offset + 1], strategy);
@@ -178,8 +178,8 @@ public class Main {
         out.println("  --count   affiche uniquement le nombre de lignes correspondantes");
         out.println("  sans mode affiche les mesures détaillées du pipeline");
         out.println();
-        out.println("Stratégies : AUTO choisit KMP pour un motif littéral, sinon AUTOMATON.");
-        out.println("              KMP, DFA et DFAM imposent un moteur ; AUTOMATON conserve le chemin DFAM.");
+        out.println("Stratégies : AUTO choisit KMP pour un motif littéral, sinon AUTOMATON (Hopcroft).");
+        out.println("              KMP, DFA, DFAM et MOORE imposent un moteur ; AUTOMATON reste Hopcroft.");
         out.println("Code de sortie : 0 succès, 2 erreur d'usage/motif/fichier.");
         out.println("Sans argument, le programme exécute la démonstration pédagogique.");
     }
@@ -448,6 +448,7 @@ public class Main {
         Path file = Path.of("Samples", "PrideAndPrejudice.txt");
         printBenchmarkResult(new Benchmark(file, "Elizabeth").pipeline(), System.out);
         printBenchmarkResult(new Benchmark(file, "Elizabeth", Benchmark.Strategy.AUTOMATON).pipeline(), System.out);
+        printBenchmarkResult(new Benchmark(file, "Elizabeth", Benchmark.Strategy.MOORE).pipeline(), System.out);
         printBenchmarkResult(new Benchmark(file, "Elizabeth|Darcy").pipeline(), System.out);
     }
 
@@ -466,8 +467,9 @@ public class Main {
                 time.preparationNanos() / 1_000_000.0, time.parsingNanos() / 1_000_000.0,
                 time.searchPreparationNanos() / 1_000_000.0);
         if (result.strategy() != Benchmark.Strategy.KMP) {
-            out.printf("  NFA : %.3f ms | DFA : %.3f ms | DFAM (Hopcroft) : %.3f ms%n",
+            out.printf("  NFA : %.3f ms | DFA : %.3f ms | minimisation (%s) : %.3f ms%n",
                     time.nfaNanos() / 1_000_000.0, time.dfaNanos() / 1_000_000.0,
+                    result.strategy() == Benchmark.Strategy.MOORE ? "Moore" : "Hopcroft",
                     time.minimizationNanos() / 1_000_000.0);
         }
         out.printf("Lecture + recherche (IO incluses) : %.3f ms | Total : %.3f ms%n",
@@ -496,7 +498,9 @@ public class Main {
 
         System.out.println("[Fait] Déterminiser le NFA en DFA avec classes de caractères disjointes.");
 
-        System.out.println("[Fait] Minimiser le DFA par raffinement de Hopcroft.");
+        System.out.println("[Fait] Minimiser le DFA par raffinement de Hopcroft (par défaut).");
+
+        System.out.println("[Fait] Comparer la minimisation alternative de Moore avec la stratégie MOORE.");
 
         System.out.println("[Fait] Afficher les lignes correspondantes hors du benchmark chronométré.");
 

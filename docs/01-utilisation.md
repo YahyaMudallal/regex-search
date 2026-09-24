@@ -92,6 +92,7 @@ Les trois arguments sont le chemin du fichier, l’expression régulière et une
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' KMP
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' DFA
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' DFAM
+./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Elizabeth' MOORE
 ./scripts/benchmark.sh Samples/PrideAndPrejudice.txt 'Eli.*beth'
 ```
 

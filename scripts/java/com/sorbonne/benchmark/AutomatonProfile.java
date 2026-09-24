@@ -3,6 +3,7 @@ package com.sorbonne.benchmark;
 import com.sorbonne.automata.Automaton;
 import com.sorbonne.regex.DFA;
 import com.sorbonne.regex.DFAM;
+import com.sorbonne.regex.DFAMMoore;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
@@ -24,10 +25,12 @@ public final class AutomatonProfile {
         Automaton nfa = NFA.buildNFA(tree);
         Automaton searchDfa = DFA.forSearch(nfa);
         Automaton minimized = DFAM.minimize(searchDfa);
-        System.out.println("regex_length,nfa_states,nfa_transitions,search_dfa_states,search_dfa_transitions,dfam_states,dfam_transitions");
-        System.out.printf("%d,%d,%d,%d,%d,%d,%d%n",
+        Automaton moore = DFAMMoore.minimize(searchDfa);
+        System.out.println("regex_length,nfa_states,nfa_transitions,search_dfa_states,search_dfa_transitions,dfam_states,dfam_transitions,moore_states,moore_transitions");
+        System.out.printf("%d,%d,%d,%d,%d,%d,%d,%d,%d%n",
                 args[0].length(), nfa.getStates().size(), nfa.getTransitions().size(),
                 searchDfa.getStates().size(), searchDfa.getTransitions().size(),
-                minimized.getStates().size(), minimized.getTransitions().size());
+                minimized.getStates().size(), minimized.getTransitions().size(),
+                moore.getStates().size(), moore.getTransitions().size());
     }
 }

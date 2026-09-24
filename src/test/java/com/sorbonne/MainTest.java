@@ -33,7 +33,7 @@ class MainTest {
     @Test
     void countModePrintsOnlyMatchingLineCount() throws Exception {
         Path file = Files.writeString(directory.resolve("texte avec espaces.txt"), "ab ab\nx\nab", StandardCharsets.US_ASCII);
-        for (String strategy : new String[] { "AUTO", "KMP", "DFA", "DFAM", "AUTOMATON" }) {
+        for (String strategy : new String[] { "AUTO", "KMP", "DFA", "DFAM", "MOORE", "AUTOMATON" }) {
             assertEquals("2" + System.lineSeparator(), capture("--count", file.toString(), "ab", strategy));
         }
     }
@@ -87,7 +87,7 @@ class MainTest {
         }
         String message = errors.toString(StandardCharsets.ISO_8859_1);
         org.junit.jupiter.api.Assertions.assertTrue(message.contains("Stratégie inconnue"));
-        org.junit.jupiter.api.Assertions.assertTrue(message.contains("AUTO, KMP, DFA, DFAM, AUTOMATON"));
+        org.junit.jupiter.api.Assertions.assertTrue(message.contains("AUTO, KMP, DFA, DFAM, MOORE, AUTOMATON"));
         org.junit.jupiter.api.Assertions.assertFalse(message.contains("Exception"));
         assertEquals("", output.toString(StandardCharsets.ISO_8859_1));
     }

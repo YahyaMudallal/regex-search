@@ -10,6 +10,7 @@ import java.util.Optional;
 import com.sorbonne.automata.Automaton;
 import com.sorbonne.regex.DFA;
 import com.sorbonne.regex.DFAM;
+import com.sorbonne.regex.DFAMMoore;
 import com.sorbonne.regex.NFA;
 import com.sorbonne.regex.RegexParser;
 import com.sorbonne.regex.SyntaxTree;
@@ -27,7 +28,8 @@ import com.sorbonne.utils.FileLoader;
  * de lettres utilise KMP ; les autres expressions passent directement du NFA
  * au DFA de recherche. La stratégie DFA indexe directement ce graphe ; DFAM
  * applique {@link DFAM#minimize(Automaton)} avant la même indexation.
- * AUTOMATON conserve le comportement historique avec minimisation.
+ * MOORE applique l'algorithme de Moore. AUTOMATON conserve le comportement
+ * historique avec minimisation de Hopcroft.
  * </p>
  *
  * <p>
@@ -64,7 +66,9 @@ public final class Benchmark {
         /** DFA de recherche sans minimisation. */
         DFA,
         /** DFA de recherche minimisé par Hopcroft. */
-        DFAM
+        DFAM,
+        /** DFA de recherche minimisé par Moore. */
+        MOORE
     }
 
     /** Consommateur d'une ligne correspondante, avec son numéro dans le fichier. */
@@ -237,8 +241,11 @@ public final class Benchmark {
             dfaNanos = System.nanoTime() - phaseStart;
             phaseStart = System.nanoTime();
             Automaton minimized = dfa;
-            if (selected != Strategy.DFA) {
+            if (selected == Strategy.DFAM || selected == Strategy.AUTOMATON) {
                 minimized = DFAM.minimize(dfa);
+                minimizationNanos = System.nanoTime() - phaseStart;
+            } else if (selected == Strategy.MOORE) {
+                minimized = DFAMMoore.minimize(dfa, false);
                 minimizationNanos = System.nanoTime() - phaseStart;
             }
             phaseStart = System.nanoTime();

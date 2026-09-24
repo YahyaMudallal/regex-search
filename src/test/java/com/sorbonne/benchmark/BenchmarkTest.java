@@ -168,7 +168,7 @@ class BenchmarkTest {
 
     /** Les témoins DFA ne paient pas Hopcroft ; les trois chemins préservent les lignes. */
     @ParameterizedTest
-    @EnumSource(value = Benchmark.Strategy.class, names = {"DFA", "DFAM", "AUTOMATON"})
+    @EnumSource(value = Benchmark.Strategy.class, names = {"DFA", "DFAM", "MOORE", "AUTOMATON"})
     void explicitAutomataPreserveRegexAndNullableShortcut(Benchmark.Strategy strategy) throws Exception {
         Path file = write("ab\nac\nxxacxx\nno\n\n");
         Benchmark.Result result = new Benchmark(file, "ab|ac", strategy).pipeline();
@@ -176,6 +176,8 @@ class BenchmarkTest {
         assertEquals(strategy, result.strategy());
         if (strategy == Benchmark.Strategy.DFA) {
             assertEquals(0, result.timings().minimizationNanos());
+        } else {
+            assertTrue(result.timings().minimizationNanos() >= 0);
         }
         Benchmark.Result nullable = new Benchmark(file, "(a|b)*", strategy).pipeline();
         assertEquals(5, nullable.matchingLines());

@@ -23,6 +23,16 @@ public final class DFAMMoore {
     }
 
     /**
+     * Minimise un automate avec Moore sans activer les traces de débogage.
+     *
+     * @param dfa automate déterministe non nul à minimiser
+     * @return l'automate minimisé
+     */
+    public static Automaton minimize(Automaton dfa) {
+        return minimize(dfa, false);
+    }
+
+    /**
      * Minimise un automate déterministe avec l'algorithme de Moore.
      * 
      * La partition initiale sépare les états finaux des autres. À chaque étape,
@@ -41,8 +51,8 @@ public final class DFAMMoore {
         Objects.requireNonNull(dfa, "Le DFA ne doit pas être nul");
 
         // alphabet ASCII
-        List<Character> alphabet = new ArrayList<>(128);
-        for (int i = 0; i < 128; i++) {
+        List<Character> alphabet = new ArrayList<>(256);
+        for (int i = 0; i < 256; i++) {
             alphabet.add((char) i);
         }
 
@@ -409,5 +419,3 @@ public final class DFAMMoore {
         return minimized;
     }    
 }
-
-

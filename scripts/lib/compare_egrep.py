@@ -145,7 +145,7 @@ def parse_args():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("file", type=Path, help="fichier a parcourir, relatif au repertoire courant")
     parser.add_argument("regex", help="regex commune au projet et à grep, à protéger avec des guillemets")
-    parser.add_argument("--strategy", choices=("AUTO", "KMP", "DFA", "DFAM", "AUTOMATON"), default="AUTO")
+    parser.add_argument("--strategy", choices=("AUTO", "KMP", "DFA", "DFAM", "MOORE", "AUTOMATON"), default="AUTO")
     parser.add_argument("--runs", type=positive_int, default=10, help="mesures par moteur (défaut : 10)")
     parser.add_argument("--warmups", type=int, default=3, help="passages préalables non mesurés (défaut : 3)")
     parser.add_argument("--seed", type=int, default=42, help="graine de l'ordre aléatoire (défaut : 42)")
@@ -190,7 +190,7 @@ def main():
         print(f"Référence : {grep_version} | locale : {environment['LC_ALL']}", flush=True)
         print("Mesure de processus complets : démarrage JVM, préparation, IO et comptage inclus.", flush=True)
         print("Passages préalables : cache de fichiers sollicité ; chaque JVM redémarre.", flush=True)
-        print("DFAM : minimisation de Hopcroft activée.", flush=True)
+        print("DFAM/AUTOMATON : minimisation de Hopcroft par défaut ; MOORE permet la comparaison Moore.", flush=True)
 
         # Validation hors chronométrage publié, puis vérification à chaque répétition.
         expected, _ = run_count(commands["grep"], environment, args.timeout, grep=True)
