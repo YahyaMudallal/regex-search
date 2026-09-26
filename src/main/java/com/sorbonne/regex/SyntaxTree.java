@@ -4,7 +4,9 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 
 /**
- * Class representing a syntax tree returned by the {@link RegexParser}.
+ * Classe représentant un arbre syntaxique pour les expressions régulières.
+ * Chaque nœud peut être un opérateur (concaténation, alternation, étoile, etc.) 
+ * ou une feuille représentant une lettre.
  */
 public class SyntaxTree {
     private NodeType nodeType;
@@ -12,6 +14,13 @@ public class SyntaxTree {
     private SyntaxTree left;
     private SyntaxTree right;
 
+    /**
+     * Constructeur pour un nœud opérateur avec deux enfants.
+     * 
+     * @param left  l'enfant gauche du nœud
+     * @param right l'enfant droit du nœud
+     * @param type  le type de nœud (concaténation, alternation, etc.)
+     */
     public SyntaxTree(SyntaxTree left, SyntaxTree right, NodeType type) {
         this.left = left;
         this.right = right;
@@ -19,6 +28,11 @@ public class SyntaxTree {
         this.letter = null;
     }
 
+    /**
+     * Constructeur pour un nœud feuille représentant une lettre.
+     * 
+     * @param letter la lettre représentée par le nœud
+     */
     public SyntaxTree(String letter) {
         this.left = null;
         this.right = null;
@@ -26,6 +40,7 @@ public class SyntaxTree {
         this.letter = letter;
     }
 
+    // fonctions d'accès et de modification pour les propriétés de l'arbre syntaxique
     public SyntaxTree getLeft() { return left; }
     public void setLeft(SyntaxTree left) { this.left = left; }
     public SyntaxTree getRight() { return right; }
@@ -35,7 +50,11 @@ public class SyntaxTree {
     public String getLetter() { return letter; }
     public void setLetter(String letter) { this.letter = letter; }
 
-    /** Détermine en O(m) si l'arbre accepte ε, sans utiliser la pile Java. */
+    /** 
+     * Détermine en O(m) si l'arbre accepte ε, sans utiliser la pile Java.
+     * 
+     * @return true si l'arbre accepte ε, false sinon
+     */
     public boolean acceptsEmpty() {
         record Visit(SyntaxTree node, boolean expanded) {}
         Deque<Visit> pending = new ArrayDeque<>();
@@ -67,7 +86,11 @@ public class SyntaxTree {
         return values.pop();
     }
 
-    /** Rendu itératif en O(nombre de nœuds + taille de la sortie). */
+    /** 
+     *  Rendu itératif en O(nombre de nœuds + taille de la sortie). 
+     *
+     * @return représentation textuelle de l'arbre syntaxique
+     */
     @Override
     public String toString() {
         record Visit(SyntaxTree node, String prefix, boolean tail) {}
@@ -91,6 +114,12 @@ public class SyntaxTree {
         return output.toString();
     }
 
+    /**
+     * Retourne l'étiquette textuelle d'un nœud syntaxique.
+     * 
+     * @param node le noeud syntaxique
+     * @return la representation textuelle du nœud
+     */
     private String getNodeLabel(SyntaxTree node) {
         if (node.nodeType == NodeType.LETTER) {
             return node.letter == null || node.letter.isEmpty() ? "∅" : node.letter;

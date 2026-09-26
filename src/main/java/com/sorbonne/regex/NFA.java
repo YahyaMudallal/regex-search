@@ -19,13 +19,31 @@ public class NFA {
     private int stateCounter;
 
     /** Extrémités d'un fragment ; aucun sous-graphe n'est recopié. */
+    
+    /**
+     * Fragment
+     * Représente un fragment d'automate avec un état de départ et un état d'acceptation.
+     * Chaque fragment est indépendant et possède une unique entrée et une unique sortie.
+     * 
+     * @param start l'état de départ du fragment
+     * @param accept l'état d'acceptation du fragment
+     */
     private record Fragment(State start, State accept) {
     }
 
+    /**
+     * Visit
+     * Représente une visite dans l'arbre syntaxique pendant la construction de l'automate.
+     * 
+     * @param tree l'arbre syntaxique à visiter
+     * @param expanded true si le nœud a déjà été étendu, false sinon
+     */
     private record Visit(SyntaxTree tree, boolean expanded) {
     }
 
     /**
+     * Construit un automate non déterministe (NFA) à partir d'un arbre syntaxique.
+     * 
      * @param tree arbre non nul
      * @return graphe indépendant, avec une unique entrée et une unique sortie
      */
@@ -34,6 +52,12 @@ public class NFA {
         return new NFA().build(tree);
     }
 
+    /**
+     * Construit un automate non déterministe (NFA) à partir d'un arbre syntaxique.
+     *  
+     * @param tree  l'arbre syntaxique à partir duquel construire le NFA
+     * @return      l'automate non déterministe construit à partir de l'arbre syntaxique
+     */
     private Automaton build(SyntaxTree tree) {
         Deque<Visit> visits = new ArrayDeque<>();
         Deque<Fragment> fragments = new ArrayDeque<>();
@@ -92,12 +116,23 @@ public class NFA {
         return automaton;
     }
 
+    /**
+     * Crée un nouvel état dans l'automate.
+     * 
+     * @return l'état créé
+     */
     private State createState() {
         State state = new State("q" + stateCounter++, Status.INTERMEDIATE);
         automaton.addState(state);
         return state;
     }
 
+    /**
+     * Ajoute une transition epsilon entre deux états.
+     * 
+     * @param source      l'état de départ
+     * @param destination l'état d'arrivée
+     */
     private void epsilon(State source, State destination) {
         automaton.add(new Transition(source, destination));
     }

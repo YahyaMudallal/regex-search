@@ -81,6 +81,13 @@ public class RegexParser {
         return operands.pop();
     }
 
+    /**
+     * Pousse un opérateur sur la pile des opérateurs.
+     * 
+     * @param operator l'opérateur à pousser
+     * @param operators la pile des opérateurs
+     * @param operands la pile des opérandes
+    */
     private static void pushOperator(NodeType operator, Deque<NodeType> operators,
             Deque<SyntaxTree> operands) {
         while (!operators.isEmpty() && operators.peek() != NodeType.OPEN_PARENTHESE
@@ -90,23 +97,46 @@ public class RegexParser {
         operators.push(operator);
     }
 
+    /**
+     * Renvoie la priorité d'un opérateur.
+     * 
+     * @param operator l'opérateur
+     * @return la priorité
+     */
     private static int priority(NodeType operator) {
         return operator == NodeType.CONCATENATION ? 2 : 1;
     }
 
+    /**
+     * Réduit les deux derniers opérandes avec l'opérateur donné.
+     * 
+     * @param operator l'opérateur à appliquer
+     * @param operands la pile des opérandes
+     */
     private static void reduce(NodeType operator, Deque<SyntaxTree> operands) {
         SyntaxTree right = operands.pop();
         SyntaxTree left = operands.pop();
         operands.push(new SyntaxTree(left, right, operator));
     }
 
-    /** Tokenise le sous-ensemble ASCII ; un échappement final reste un antislash littéral. */
+    /** 
+     * Tokenise le sous-ensemble ASCII ; un échappement final reste un antislash littéral.
+     * 
+     * @param regex expression régulière
+     * @return liste de nœuds syntaxiques 
+     */
     private static void requireAscii(char symbol) {
         if (symbol > 0x7f) {
             throw new IllegalArgumentException("Le motif doit appartenir a l'alphabet ASCII");
         }
     }
 
+    /**
+     * Initialise la liste des nœuds syntaxiques à partir d'une expression régulière.
+     * 
+     * @param regex expression régulière
+     * @return liste de nœuds syntaxiques
+     */
     protected static List<SyntaxTree> initSyntaxTreeList(String regex) {
         List<SyntaxTree> result = new ArrayList<>();
         if (regex == null) {

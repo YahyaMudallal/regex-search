@@ -7,7 +7,6 @@ import com.sorbonne.search.NativeSearch;
 import com.sorbonne.search.PreparedSearch;
 import com.sorbonne.search.SearchCursor;
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
